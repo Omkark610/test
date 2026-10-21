@@ -1,0 +1,319 @@
+<!-- AR Mario test -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quest 3 Mini Character AR</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: sans-serif;
+            overflow: hidden;
+        }
+        #info {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            z-index: 10;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h2>Quest 3 Mini-Mario AR (~15cm)</h2>
+        <p>Left/Right Thumbstick: Move | A/X Button or Trigger: Jump | B/Y Button: Reset Position</p>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { ARButton } from 'three/addons/webxr/ARButton.js';
+
+        let camera, scene, renderer;
+        let character, leftLeg, rightLeg, leftArm, rightArm;
+        
+        // Physics & Movement Constants (in meters)
+        const GRAVITY = -4.5;
+        const JUMP_FORCE = 1.6;
+        const MOVE_SPEED = 0.8; 
+        let velocityY = 0;
+        let isGrounded = true;
+        let floorY = 0; // Local floor height
+
+        const clock = new THREE.Clock();
+
+        init();
+        animate();
+
+        function createMiniCharacter() {
+            const group = new THREE.Group();
+
+            // Materials (Mario-style color palette)
+            const redMat = new THREE.MeshStandardMaterial({ color: 0xe52521, roughness: 0.6 });
+            const blueMat = new THREE.MeshStandardMaterial({ color: 0x002f87, roughness: 0.6 });
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xffcc99, roughness: 0.6 });
+            const brownMat = new THREE.MeshStandardMaterial({ color: 0x6b3e08, roughness: 0.7 });
+
+            // Total height is roughly 0.15m (15cm)
+            // Legs (0.04m high)
+            const legGeo = new THREE.BoxGeometry(0.022, 0.04, 0.025);
+            leftLeg = new THREE.Mesh(legGeo, blueMat);
+            leftLeg.position.set(-0.014, 0.02, 0);
+            group.add(leftLeg);
+
+            rightLeg = new THREE.Mesh(legGeo, blueMat);
+            rightLeg.position.set(0.014, 0.02, 0);
+            group.add(rightLeg);
+
+            // Shoes
+            const shoeGeo = new THREE.BoxGeometry(0.024, 0.015, 0.032);
+            const leftShoe = new THREE.Mesh(shoeGeo, brownMat);
+            leftShoe.position.set(0, -0.015, 0.004);
+            leftLeg.add(leftShoe);
+
+            const rightShoe = new THREE.Mesh(shoeGeo, brownMat);
+            rightShoe.position.set(0, -0.015, 0.004);
+            rightLeg.add(rightShoe);
+
+            // Torso (0.05m high)
+            const torsoGeo = new THREE.BoxGeometry(0.055, 0.05, 0.035);
+            const torso = new THREE.Mesh(torsoGeo, redMat);
+            torso.position.set(0, 0.065, 0);
+            group.add(torso);
+
+            // Overalls strap detail
+            const overallGeo = new THREE.BoxGeometry(0.057, 0.025, 0.037);
+            const overalls = new THREE.Mesh(overallGeo, blueMat);
+            overalls.position.set(0, 0.052, 0);
+            group.add(overalls);
+
+            // Arms
+            const armGeo = new THREE.BoxGeometry(0.018, 0.045, 0.018);
+            leftArm = new THREE.Mesh(armGeo, redMat);
+            leftArm.position.set(-0.038, 0.065, 0);
+            group.add(leftArm);
+
+            rightArm = new THREE.Mesh(armGeo, redMat);
+            rightArm.position.set(0.038, 0.065, 0);
+            group.add(rightArm);
+
+            // Head (0.045m high)
+            const headGeo = new THREE.BoxGeometry(0.048, 0.045, 0.048);
+            const head = new THREE.Mesh(headGeo, skinMat);
+            head.position.set(0, 0.112, 0);
+            group.add(head);
+
+            // Nose & Mustache
+            const noseGeo = new THREE.BoxGeometry(0.016, 0.012, 0.015);
+            const nose = new THREE.Mesh(noseGeo, skinMat);
+            nose.position.set(0, 0.112, 0.028);
+            group.add(nose);
+
+            const mustacheGeo = new THREE.BoxGeometry(0.036, 0.008, 0.012);
+            const mustache = new THREE.Mesh(mustacheGeo, brownMat);
+            mustache.position.set(0, 0.102, 0.026);
+            group.add(mustache);
+
+            // Cap (brings total height to ~0.15m)
+            const capGeo = new THREE.BoxGeometry(0.052, 0.018, 0.052);
+            const cap = new THREE.Mesh(capGeo, redMat);
+            cap.position.set(0, 0.142, 0);
+            group.add(cap);
+
+            const visorGeo = new THREE.BoxGeometry(0.05, 0.008, 0.025);
+            const visor = new THREE.Mesh(visorGeo, redMat);
+            visor.position.set(0, 0.136, 0.032);
+            group.add(visor);
+
+            // Simple ground shadow blob
+            const shadowGeo = new THREE.CircleGeometry(0.045, 16);
+            const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35 });
+            const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+            shadow.rotation.x = -Math.PI / 2;
+            shadow.position.y = 0.001;
+            shadow.name = "shadow";
+            group.add(shadow);
+
+            return group;
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+            // Lighting
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 2.5);
+            hemiLight.position.set(0, 2, 0);
+            scene.add(hemiLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            dirLight.position.set(1, 3, 2);
+            scene.add(dirLight);
+
+            // Create 15cm character and place 1 meter in front of user
+            character = createMiniCharacter();
+            character.position.set(0, floorY, -1.0);
+            scene.add(character);
+
+            // Renderer with alpha enabled for AR passthrough
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.xr.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Add AR Button requesting local-floor reference space
+            document.body.appendChild(ARButton.createButton(renderer, {
+                requiredFeatures: ['local-floor']
+            }));
+
+            // When AR starts, spawn the character cleanly in front of the user at table/floor height
+            renderer.xr.addEventListener('sessionstart', () => {
+                floorY = 0; // local-floor puts 0 at physical floor level
+                character.position.set(0, floorY, -0.8);
+            });
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function handleControllerInput(delta) {
+            const session = renderer.xr.getSession();
+            if (!session) return;
+
+            let moveX = 0;
+            let moveZ = 0;
+            let jumpPressed = false;
+            let resetPressed = false;
+
+            for (const source of session.inputSources) {
+                if (!source.gamepad) continue;
+                const gp = source.gamepad;
+
+                // Quest Touch controllers thumbstick axes are typically indices 2 and 3
+                const axisX = gp.axes.length > 2 ? gp.axes[2] : gp.axes[0] || 0;
+                const axisY = gp.axes.length > 3 ? gp.axes[3] : gp.axes[1] || 0;
+
+                if (Math.abs(axisX) > 0.15) moveX += axisX;
+                if (Math.abs(axisY) > 0.15) moveZ += axisY;
+
+                // Trigger (button 0) or A/X Button (button 4) -> Jump
+                if ((gp.buttons[0] && gp.buttons[0].pressed) || (gp.buttons[4] && gp.buttons[4].pressed)) {
+                    jumpPressed = true;
+                }
+
+                // B/Y Button (button 5) -> Reset character in front of camera
+                if (gp.buttons[5] && gp.buttons[5].pressed) {
+                    resetPressed = true;
+                }
+            }
+
+            if (resetPressed) {
+                const camDir = new THREE.Vector3();
+                camera.getWorldDirection(camDir);
+                camDir.y = 0;
+                camDir.normalize();
+                character.position.x = camera.position.x + camDir.x * 0.6;
+                character.position.z = camera.position.z + camDir.z * 0.6;
+                character.position.y = floorY;
+                velocityY = 0;
+            }
+
+            // Convert thumbstick input to camera-relative horizontal movement
+            if (Math.abs(moveX) > 0 || Math.abs(moveZ) > 0) {
+                const forward = new THREE.Vector3();
+                camera.getWorldDirection(forward);
+                forward.y = 0;
+                forward.normalize();
+
+                const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+                const moveVec = new THREE.Vector3()
+                    .addScaledVector(right, moveX)
+                    .addScaledVector(forward, -moveZ);
+
+                if (moveVec.lengthSq() > 1) moveVec.normalize();
+
+                character.position.x += moveVec.x * MOVE_SPEED * delta;
+                character.position.z += moveVec.z * MOVE_SPEED * delta;
+
+                // Rotate character to face movement direction
+                const targetAngle = Math.atan2(moveVec.x, moveVec.z);
+                character.rotation.y = targetAngle;
+
+                // Animate limbs while running
+                const runCycle = clock.getElapsedTime() * 18;
+                leftLeg.rotation.x = Math.sin(runCycle) * 0.7;
+                rightLeg.rotation.x = -Math.sin(runCycle) * 0.7;
+                leftArm.rotation.x = -Math.sin(runCycle) * 0.7;
+                rightArm.rotation.x = Math.sin(runCycle) * 0.7;
+            } else {
+                // Idle pose
+                leftLeg.rotation.x = 0;
+                rightLeg.rotation.x = 0;
+                leftArm.rotation.x = 0;
+                rightArm.rotation.x = 0;
+            }
+
+            // Jump logic
+            if (jumpPressed && isGrounded) {
+                velocityY = JUMP_FORCE;
+                isGrounded = false;
+            }
+
+            // Apply Gravity
+            character.position.y += velocityY * delta;
+            velocityY += GRAVITY * delta;
+
+            if (character.position.y <= floorY) {
+                character.position.y = floorY;
+                velocityY = 0;
+                isGrounded = true;
+            } else {
+                // Jump pose
+                leftArm.rotation.x = Math.PI;
+                rightArm.rotation.x = 0;
+            }
+
+            // Keep shadow pinned to the floor and scale it with height
+            const shadow = character.getObjectByName("shadow");
+            if (shadow) {
+                const heightAboveFloor = character.position.y - floorY;
+                shadow.position.y = -heightAboveFloor + 0.001;
+                const scale = Math.max(0.3, 1 - heightAboveFloor * 1.5);
+                shadow.scale.set(scale, scale, 1);
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            renderer.setAnimationLoop(render);
+        }
+
+        function render() {
+            const delta = Math.min(clock.getDelta(), 0.1);
+            handleControllerInput(delta);
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
