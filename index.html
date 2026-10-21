@@ -5,7 +5,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quest 3 Mini Character AR</title>
+    <title>Quest 3 Protagonist AR (~15cm)</title>
     <style>
         body {
             margin: 0;
@@ -21,13 +21,14 @@
             text-align: center;
             z-index: 10;
             pointer-events: none;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
         }
     </style>
 </head>
 <body>
     <div id="info">
-        <h2>Quest 3 Mini-Mario AR (~15cm)</h2>
-        <p>Left/Right Thumbstick: Move | A/X Button or Trigger: Jump | B/Y Button: Reset Position</p>
+        <h2>Quest 3 Protagonist AR (~15cm)</h2>
+        <p>Thumbstick: Move/Run | A/X or Trigger: Jump | B/Y: Reset Position</p>
     </div>
 
     <script type="importmap">
@@ -44,103 +45,304 @@
         import { ARButton } from 'three/addons/webxr/ARButton.js';
 
         let camera, scene, renderer;
-        let character, leftLeg, rightLeg, leftArm, rightArm;
+        let character, leftLegPivot, rightLegPivot, leftArmPivot, rightArmPivot;
         
         // Physics & Movement Constants (in meters)
         const GRAVITY = -4.5;
         const JUMP_FORCE = 1.6;
-        const MOVE_SPEED = 0.8; 
+        const MOVE_SPEED = 0.85; 
         let velocityY = 0;
         let isGrounded = true;
-        let floorY = 0; // Local floor height
+        let floorY = 0;
 
         const clock = new THREE.Clock();
 
         init();
         animate();
 
-        function createMiniCharacter() {
+        // Procedurally generate the reddish-maroon polka-dot tie texture from the sheet
+        function createTieTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+
+            // Base maroon color
+            ctx.fillStyle = '#7a2029';
+            ctx.fillRect(0, 0, 64, 64);
+
+            // Micro white/pinkish pattern dots
+            ctx.fillStyle = '#e8c5c8';
+            const step = 8;
+            for (let y = 0; y < 64; y += step) {
+                for (let x = 0; x < 64; x += step) {
+                    const offsetX = (y / step) % 2 === 0 ? 0 : step / 2;
+                    ctx.beginPath();
+                    ctx.arc(x + offsetX, y, 1.2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            return texture;
+        }
+
+        function createSuitProtagonist() {
             const group = new THREE.Group();
 
-            // Materials (Mario-style color palette)
-            const redMat = new THREE.MeshStandardMaterial({ color: 0xe52521, roughness: 0.6 });
-            const blueMat = new THREE.MeshStandardMaterial({ color: 0x002f87, roughness: 0.6 });
-            const skinMat = new THREE.MeshStandardMaterial({ color: 0xffcc99, roughness: 0.6 });
-            const brownMat = new THREE.MeshStandardMaterial({ color: 0x6b3e08, roughness: 0.7 });
+            // Palette matched to Character Continuity Sheet
+            const suitMat = new THREE.MeshStandardMaterial({ color: 0x33363b, roughness: 0.75 }); // Dark Gray / Charcoal Suit
+            const beltMat = new THREE.MeshStandardMaterial({ color: 0x151517, roughness: 0.4 });  // Black Belt
+            const shirtMat = new THREE.MeshStandardMaterial({ color: 0xf3edea, roughness: 0.5 }); // Crisp White Shirt
+            const tieMat = new THREE.MeshStandardMaterial({ map: createTieTexture(), roughness: 0.5 }); // Maroon Patterned Tie
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xd19a77, roughness: 0.55 }); // Warm Tan Skin
+            const hairMat = new THREE.MeshStandardMaterial({ color: 0x161311, roughness: 0.85 }); // Thick Dark Hair
+            const beardMat = new THREE.MeshStandardMaterial({ color: 0x1e1916, roughness: 0.9 }); // Trimmed Beard/Mustache
+            const shoeMat = new THREE.MeshStandardMaterial({ color: 0x361f17, roughness: 0.3 });  // Dark Brown Leather Shoes
+            const metalMat = new THREE.MeshStandardMaterial({ color: 0xc0c0c0, metalness: 0.8, roughness: 0.2 }); // Tie clip / Buckle
 
-            // Total height is roughly 0.15m (15cm)
-            // Legs (0.04m high)
-            const legGeo = new THREE.BoxGeometry(0.022, 0.04, 0.025);
-            leftLeg = new THREE.Mesh(legGeo, blueMat);
-            leftLeg.position.set(-0.014, 0.02, 0);
-            group.add(leftLeg);
+            // --- LEGS (Total height ~0.06m, hip pivot at y = 0.06m) ---
+            leftLegPivot = new THREE.Group();
+            leftLegPivot.position.set(-0.011, 0.06, 0);
+            group.add(leftLegPivot);
 
-            rightLeg = new THREE.Mesh(legGeo, blueMat);
-            rightLeg.position.set(0.014, 0.02, 0);
-            group.add(rightLeg);
+            rightLegPivot = new THREE.Group();
+            rightLegPivot.position.set(0.011, 0.06, 0);
+            group.add(rightLegPivot);
 
-            // Shoes
-            const shoeGeo = new THREE.BoxGeometry(0.024, 0.015, 0.032);
-            const leftShoe = new THREE.Mesh(shoeGeo, brownMat);
-            leftShoe.position.set(0, -0.015, 0.004);
-            leftLeg.add(leftShoe);
+            const trouserGeo = new THREE.BoxGeometry(0.018, 0.052, 0.02);
+            const leftTrouser = new THREE.Mesh(trouserGeo, suitMat);
+            leftTrouser.position.set(0, -0.024, 0);
+            leftLegPivot.add(leftTrouser);
 
-            const rightShoe = new THREE.Mesh(shoeGeo, brownMat);
-            rightShoe.position.set(0, -0.015, 0.004);
-            rightLeg.add(rightShoe);
+            const rightTrouser = new THREE.Mesh(trouserGeo, suitMat);
+            rightTrouser.position.set(0, -0.024, 0);
+            rightLegPivot.add(rightTrouser);
 
-            // Torso (0.05m high)
-            const torsoGeo = new THREE.BoxGeometry(0.055, 0.05, 0.035);
-            const torso = new THREE.Mesh(torsoGeo, redMat);
-            torso.position.set(0, 0.065, 0);
-            group.add(torso);
+            // Dress Shoes
+            const shoeGeo = new THREE.BoxGeometry(0.018, 0.011, 0.028);
+            const leftShoe = new THREE.Mesh(shoeGeo, shoeMat);
+            leftShoe.position.set(0, -0.0545, 0.004);
+            leftLegPivot.add(leftShoe);
 
-            // Overalls strap detail
-            const overallGeo = new THREE.BoxGeometry(0.057, 0.025, 0.037);
-            const overalls = new THREE.Mesh(overallGeo, blueMat);
-            overalls.position.set(0, 0.052, 0);
-            group.add(overalls);
+            const rightShoe = new THREE.Mesh(shoeGeo, shoeMat);
+            rightShoe.position.set(0, -0.0545, 0.004);
+            rightLegPivot.add(rightShoe);
 
-            // Arms
-            const armGeo = new THREE.BoxGeometry(0.018, 0.045, 0.018);
-            leftArm = new THREE.Mesh(armGeo, redMat);
-            leftArm.position.set(-0.038, 0.065, 0);
-            group.add(leftArm);
+            // --- TORSO & SUIT BLAZER (y = 0.06m to 0.11m) ---
+            // Pelvis / Belt area
+            const pelvisGeo = new THREE.BoxGeometry(0.04, 0.012, 0.022);
+            const pelvis = new THREE.Mesh(pelvisGeo, suitMat);
+            pelvis.position.set(0, 0.062, 0);
+            group.add(pelvis);
 
-            rightArm = new THREE.Mesh(armGeo, redMat);
-            rightArm.position.set(0.038, 0.065, 0);
-            group.add(rightArm);
+            const beltGeo = new THREE.BoxGeometry(0.041, 0.004, 0.023);
+            const belt = new THREE.Mesh(beltGeo, beltMat);
+            belt.position.set(0, 0.067, 0);
+            group.add(belt);
 
-            // Head (0.045m high)
-            const headGeo = new THREE.BoxGeometry(0.048, 0.045, 0.048);
+            // White Dress Shirt Core
+            const shirtGeo = new THREE.BoxGeometry(0.04, 0.044, 0.022);
+            const shirt = new THREE.Mesh(shirtGeo, shirtMat);
+            shirt.position.set(0, 0.088, 0);
+            group.add(shirt);
+
+            // Blazer Left & Right Panels (leaves V-opening in center for shirt & tie)
+            const panelGeo = new THREE.BoxGeometry(0.014, 0.048, 0.025);
+            const leftBlazer = new THREE.Mesh(panelGeo, suitMat);
+            leftBlazer.position.set(-0.014, 0.086, 0.001);
+            group.add(leftBlazer);
+
+            const rightBlazer = new THREE.Mesh(panelGeo, suitMat);
+            rightBlazer.position.set(0.014, 0.086, 0.001);
+            group.add(rightBlazer);
+
+            // Blazer Back Panel
+            const backGeo = new THREE.BoxGeometry(0.042, 0.048, 0.014);
+            const backBlazer = new THREE.Mesh(backGeo, suitMat);
+            backBlazer.position.set(0, 0.086, -0.005);
+            group.add(backBlazer);
+
+            // Blazer Lapels (angled on chest)
+            const lapelGeo = new THREE.BoxGeometry(0.007, 0.032, 0.026);
+            const leftLapel = new THREE.Mesh(lapelGeo, suitMat);
+            leftLapel.position.set(-0.006, 0.092, 0.0015);
+            leftLapel.rotation.z = -0.22;
+            group.add(leftLapel);
+
+            const rightLapel = new THREE.Mesh(lapelGeo, suitMat);
+            rightLapel.position.set(0.006, 0.092, 0.0015);
+            rightLapel.rotation.z = 0.22;
+            group.add(rightLapel);
+
+            // Shirt Collar & Patterned Maroon Tie
+            const collarGeo = new THREE.BoxGeometry(0.022, 0.006, 0.023);
+            const collar = new THREE.Mesh(collarGeo, shirtMat);
+            collar.position.set(0, 0.111, 0);
+            group.add(collar);
+
+            const knotGeo = new THREE.BoxGeometry(0.006, 0.006, 0.005);
+            const tieKnot = new THREE.Mesh(knotGeo, tieMat);
+            tieKnot.position.set(0, 0.107, 0.012);
+            group.add(tieKnot);
+
+            const tieGeo = new THREE.BoxGeometry(0.0055, 0.036, 0.004);
+            const tieBody = new THREE.Mesh(tieGeo, tieMat);
+            tieBody.position.set(0, 0.087, 0.0125);
+            group.add(tieBody);
+
+            // Silver Tie Clip (as seen in full-body turnaround)
+            const clipGeo = new THREE.BoxGeometry(0.006, 0.0012, 0.005);
+            const tieClip = new THREE.Mesh(clipGeo, metalMat);
+            tieClip.position.set(0, 0.09, 0.013);
+            group.add(tieClip);
+
+            // --- ARMS (Shoulder pivots at y = 0.106m) ---
+            leftArmPivot = new THREE.Group();
+            leftArmPivot.position.set(-0.026, 0.106, 0);
+            group.add(leftArmPivot);
+
+            rightArmPivot = new THREE.Group();
+            rightArmPivot.position.set(0.026, 0.106, 0);
+            group.add(rightArmPivot);
+
+            const sleeveGeo = new THREE.BoxGeometry(0.013, 0.042, 0.015);
+            const cuffGeo = new THREE.BoxGeometry(0.011, 0.004, 0.013);
+            const handGeo = new THREE.BoxGeometry(0.01, 0.01, 0.012);
+
+            // Left Arm Assembly
+            const leftSleeve = new THREE.Mesh(sleeveGeo, suitMat);
+            leftSleeve.position.set(0, -0.019, 0);
+            leftArmPivot.add(leftSleeve);
+
+            const leftCuff = new THREE.Mesh(cuffGeo, shirtMat);
+            leftCuff.position.set(0, -0.041, 0);
+            leftArmPivot.add(leftCuff);
+
+            const leftHand = new THREE.Mesh(handGeo, skinMat);
+            leftHand.position.set(0, -0.047, 0);
+            leftArmPivot.add(leftHand);
+
+            // Right Arm Assembly
+            const rightSleeve = new THREE.Mesh(sleeveGeo, suitMat);
+            rightSleeve.position.set(0, -0.019, 0);
+            rightArmPivot.add(rightSleeve);
+
+            const rightCuff = new THREE.Mesh(cuffGeo, shirtMat);
+            rightCuff.position.set(0, -0.041, 0);
+            rightArmPivot.add(rightCuff);
+
+            const rightHand = new THREE.Mesh(handGeo, skinMat);
+            rightHand.position.set(0, -0.047, 0);
+            rightArmPivot.add(rightHand);
+
+            // --- NECK & HEAD (y = 0.11m to 0.15m) ---
+            const neckGeo = new THREE.BoxGeometry(0.016, 0.008, 0.016);
+            const neck = new THREE.Mesh(neckGeo, skinMat);
+            neck.position.set(0, 0.114, 0);
+            group.add(neck);
+
+            const headGroup = new THREE.Group();
+            headGroup.position.set(0, 0.131, 0);
+            group.add(headGroup);
+
+            // Main Face Box
+            const headGeo = new THREE.BoxGeometry(0.028, 0.03, 0.028);
             const head = new THREE.Mesh(headGeo, skinMat);
-            head.position.set(0, 0.112, 0);
-            group.add(head);
+            headGroup.add(head);
 
-            // Nose & Mustache
-            const noseGeo = new THREE.BoxGeometry(0.016, 0.012, 0.015);
+            // Ears
+            const earGeo = new THREE.BoxGeometry(0.004, 0.008, 0.006);
+            const leftEar = new THREE.Mesh(earGeo, skinMat);
+            leftEar.position.set(-0.015, -0.001, 0);
+            headGroup.add(leftEar);
+
+            const rightEar = new THREE.Mesh(earGeo, skinMat);
+            rightEar.position.set(0.015, -0.001, 0);
+            headGroup.add(rightEar);
+
+            // Nose
+            const noseGeo = new THREE.BoxGeometry(0.005, 0.008, 0.005);
             const nose = new THREE.Mesh(noseGeo, skinMat);
-            nose.position.set(0, 0.112, 0.028);
-            group.add(nose);
+            nose.position.set(0, 0.0, 0.015);
+            headGroup.add(nose);
 
-            const mustacheGeo = new THREE.BoxGeometry(0.036, 0.008, 0.012);
-            const mustache = new THREE.Mesh(mustacheGeo, brownMat);
-            mustache.position.set(0, 0.102, 0.026);
-            group.add(mustache);
+            // Dark Expressive Eyes & Thick Eyebrows
+            const eyeWhiteGeo = new THREE.BoxGeometry(0.006, 0.003, 0.002);
+            const pupilGeo = new THREE.BoxGeometry(0.003, 0.003, 0.0025);
+            const browGeo = new THREE.BoxGeometry(0.008, 0.0022, 0.003);
 
-            // Cap (brings total height to ~0.15m)
-            const capGeo = new THREE.BoxGeometry(0.052, 0.018, 0.052);
-            const cap = new THREE.Mesh(capGeo, redMat);
-            cap.position.set(0, 0.142, 0);
-            group.add(cap);
+            const leftEyeWhite = new THREE.Mesh(eyeWhiteGeo, shirtMat);
+            leftEyeWhite.position.set(-0.0065, 0.004, 0.014);
+            headGroup.add(leftEyeWhite);
 
-            const visorGeo = new THREE.BoxGeometry(0.05, 0.008, 0.025);
-            const visor = new THREE.Mesh(visorGeo, redMat);
-            visor.position.set(0, 0.136, 0.032);
-            group.add(visor);
+            const leftPupil = new THREE.Mesh(pupilGeo, hairMat);
+            leftPupil.position.set(-0.0065, 0.004, 0.0142);
+            headGroup.add(leftPupil);
 
-            // Simple ground shadow blob
-            const shadowGeo = new THREE.CircleGeometry(0.045, 16);
+            const rightEyeWhite = new THREE.Mesh(eyeWhiteGeo, shirtMat);
+            rightEyeWhite.position.set(0.0065, 0.004, 0.014);
+            headGroup.add(rightEyeWhite);
+
+            const rightPupil = new THREE.Mesh(pupilGeo, hairMat);
+            rightPupil.position.set(0.0065, 0.004, 0.0142);
+            headGroup.add(rightPupil);
+
+            const leftBrow = new THREE.Mesh(browGeo, beardMat);
+            leftBrow.position.set(-0.0065, 0.0075, 0.0145);
+            headGroup.add(leftBrow);
+
+            const rightBrow = new THREE.Mesh(browGeo, beardMat);
+            rightBrow.position.set(0.0065, 0.0075, 0.0145);
+            headGroup.add(rightBrow);
+
+            // Trimmed Beard, Jawline & Mustache
+            const jawBeardGeo = new THREE.BoxGeometry(0.0295, 0.01, 0.0295);
+            const jawBeard = new THREE.Mesh(jawBeardGeo, beardMat);
+            jawBeard.position.set(0, -0.0105, 0.0005);
+            headGroup.add(jawBeard);
+
+            // Sideburns connecting beard to hair
+            const sideburnGeo = new THREE.BoxGeometry(0.0298, 0.012, 0.012);
+            const sideburns = new THREE.Mesh(sideburnGeo, beardMat);
+            sideburns.position.set(0, -0.002, -0.002);
+            headGroup.add(sideburns);
+
+            // Mustache
+            const mustacheGeo = new THREE.BoxGeometry(0.015, 0.0035, 0.004);
+            const mustache = new THREE.Mesh(mustacheGeo, beardMat);
+            mustache.position.set(0, -0.0055, 0.0145);
+            headGroup.add(mustache);
+
+            // Lower lip skin detail inside beard
+            const lipGeo = new THREE.BoxGeometry(0.008, 0.0025, 0.003);
+            const lip = new THREE.Mesh(lipGeo, skinMat);
+            lip.position.set(0, -0.008, 0.0148);
+            headGroup.add(lip);
+
+            // Thick Dark Voluminous Side-Swept Hair (tops out around ~0.15m)
+            const topHairGeo = new THREE.BoxGeometry(0.032, 0.01, 0.032);
+            const topHair = new THREE.Mesh(topHairGeo, hairMat);
+            topHair.position.set(0, 0.015, 0);
+            headGroup.add(topHair);
+
+            // Front Swept Quiff Volume
+            const quiffGeo = new THREE.BoxGeometry(0.028, 0.008, 0.014);
+            const quiff = new THREE.Mesh(quiffGeo, hairMat);
+            quiff.position.set(0.002, 0.018, 0.01);
+            quiff.rotation.z = -0.12;
+            headGroup.add(quiff);
+
+            // Back & Side Hair Taper
+            const backHairGeo = new THREE.BoxGeometry(0.031, 0.024, 0.014);
+            const backHair = new THREE.Mesh(backHairGeo, hairMat);
+            backHair.position.set(0, 0.005, -0.01);
+            headGroup.add(backHair);
+
+            // Ground Shadow Blob
+            const shadowGeo = new THREE.CircleGeometry(0.04, 16);
             const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35 });
             const shadow = new THREE.Mesh(shadowGeo, shadowMat);
             shadow.rotation.x = -Math.PI / 2;
@@ -156,35 +358,33 @@
 
             camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-            // Lighting
-            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 2.5);
+            // Balanced studio lighting to show off suit and facial structure
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x555555, 2.8);
             hemiLight.position.set(0, 2, 0);
             scene.add(hemiLight);
 
-            const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-            dirLight.position.set(1, 3, 2);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.8);
+            dirLight.position.set(1.5, 3, 2);
             scene.add(dirLight);
 
-            // Create 15cm character and place 1 meter in front of user
-            character = createMiniCharacter();
-            character.position.set(0, floorY, -1.0);
+            // Create 15cm Protagonist
+            character = createSuitProtagonist();
+            character.position.set(0, floorY, -0.8);
             scene.add(character);
 
-            // Renderer with alpha enabled for AR passthrough
+            // WebGL Renderer with alpha for Quest 3 Passthrough AR
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.xr.enabled = true;
             document.body.appendChild(renderer.domElement);
 
-            // Add AR Button requesting local-floor reference space
             document.body.appendChild(ARButton.createButton(renderer, {
                 requiredFeatures: ['local-floor']
             }));
 
-            // When AR starts, spawn the character cleanly in front of the user at table/floor height
             renderer.xr.addEventListener('sessionstart', () => {
-                floorY = 0; // local-floor puts 0 at physical floor level
+                floorY = 0;
                 character.position.set(0, floorY, -0.8);
             });
 
@@ -204,19 +404,18 @@
                 if (!source.gamepad) continue;
                 const gp = source.gamepad;
 
-                // Quest Touch controllers thumbstick axes are typically indices 2 and 3
                 const axisX = gp.axes.length > 2 ? gp.axes[2] : gp.axes[0] || 0;
                 const axisY = gp.axes.length > 3 ? gp.axes[3] : gp.axes[1] || 0;
 
                 if (Math.abs(axisX) > 0.15) moveX += axisX;
                 if (Math.abs(axisY) > 0.15) moveZ += axisY;
 
-                // Trigger (button 0) or A/X Button (button 4) -> Jump
+                // Trigger (0) or A/X Button (4) -> Jump
                 if ((gp.buttons[0] && gp.buttons[0].pressed) || (gp.buttons[4] && gp.buttons[4].pressed)) {
                     jumpPressed = true;
                 }
 
-                // B/Y Button (button 5) -> Reset character in front of camera
+                // B/Y Button (5) -> Reset Position in front of user
                 if (gp.buttons[5] && gp.buttons[5].pressed) {
                     resetPressed = true;
                 }
@@ -233,7 +432,7 @@
                 velocityY = 0;
             }
 
-            // Convert thumbstick input to camera-relative horizontal movement
+            // Camera-relative movement
             if (Math.abs(moveX) > 0 || Math.abs(moveZ) > 0) {
                 const forward = new THREE.Vector3();
                 camera.getWorldDirection(forward);
@@ -251,31 +450,31 @@
                 character.position.x += moveVec.x * MOVE_SPEED * delta;
                 character.position.z += moveVec.z * MOVE_SPEED * delta;
 
-                // Rotate character to face movement direction
+                // Face movement direction
                 const targetAngle = Math.atan2(moveVec.x, moveVec.z);
                 character.rotation.y = targetAngle;
 
-                // Animate limbs while running
-                const runCycle = clock.getElapsedTime() * 18;
-                leftLeg.rotation.x = Math.sin(runCycle) * 0.7;
-                rightLeg.rotation.x = -Math.sin(runCycle) * 0.7;
-                leftArm.rotation.x = -Math.sin(runCycle) * 0.7;
-                rightArm.rotation.x = Math.sin(runCycle) * 0.7;
+                // Natural shoulder/hip swing animation
+                const speedFactor = Math.min(1, Math.hypot(moveX, moveZ));
+                const runCycle = clock.getElapsedTime() * 16;
+                leftLegPivot.rotation.x = Math.sin(runCycle) * 0.65 * speedFactor;
+                rightLegPivot.rotation.x = -Math.sin(runCycle) * 0.65 * speedFactor;
+                leftArmPivot.rotation.x = -Math.sin(runCycle) * 0.55 * speedFactor;
+                rightArmPivot.rotation.x = Math.sin(runCycle) * 0.55 * speedFactor;
             } else {
-                // Idle pose
-                leftLeg.rotation.x = 0;
-                rightLeg.rotation.x = 0;
-                leftArm.rotation.x = 0;
-                rightArm.rotation.x = 0;
+                // Confident neutral standing pose
+                leftLegPivot.rotation.x = 0;
+                rightLegPivot.rotation.x = 0;
+                leftArmPivot.rotation.x = 0;
+                rightArmPivot.rotation.x = 0;
             }
 
-            // Jump logic
+            // Jump & Gravity
             if (jumpPressed && isGrounded) {
                 velocityY = JUMP_FORCE;
                 isGrounded = false;
             }
 
-            // Apply Gravity
             character.position.y += velocityY * delta;
             velocityY += GRAVITY * delta;
 
@@ -284,12 +483,14 @@
                 velocityY = 0;
                 isGrounded = true;
             } else {
-                // Jump pose
-                leftArm.rotation.x = Math.PI;
-                rightArm.rotation.x = 0;
+                // Action-ready mid-air pose
+                leftArmPivot.rotation.x = -0.6;
+                rightArmPivot.rotation.x = 0.4;
+                leftLegPivot.rotation.x = 0.35;
+                rightLegPivot.rotation.x = -0.25;
             }
 
-            // Keep shadow pinned to the floor and scale it with height
+            // Keep ground shadow locked to floor level
             const shadow = character.getObjectByName("shadow");
             if (shadow) {
                 const heightAboveFloor = character.position.y - floorY;
