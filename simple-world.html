@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WILD HORIZONS - Open World Nature Exploration</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #050b14;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #ffffff;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* Overlay UI Styling */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 24px;
+            transition: opacity 0.5s ease;
+        }
+
+        .interactive {
+            pointer-events: auto;
+        }
+
+        /* Start Screen Modal */
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, rgba(10, 25, 20, 0.85) 0%, rgba(5, 12, 24, 0.92) 100%),
+                        url('https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1920&q=80') center/cover no-repeat;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 20px;
+            backdrop-filter: blur(8px);
+        }
+
+        .title-card {
+            background: rgba(15, 28, 24, 0.65);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 40px 60px;
+            border-radius: 24px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2);
+            max-width: 650px;
+            width: 90%;
+        }
+
+        h1 {
+            font-size: 3.5rem;
+            letter-spacing: 8px;
+            font-weight: 300;
+            margin-bottom: 8px;
+            background: linear-gradient(180deg, #ffffff 0%, #a8e6cf 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: #88d8b0;
+            letter-spacing: 3px;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+            font-weight: 400;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #2b5846 0%, #1e3d31 100%);
+            color: #e0f2fe;
+            border: 1px solid rgba(168, 230, 207, 0.4);
+            padding: 14px 32px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            background: linear-gradient(135deg, #3a755d 0%, #295242 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(78, 205, 196, 0.3);
+            border-color: #a8e6cf;
+        }
+
+        .btn-vr {
+            background: linear-gradient(135deg, #6b21a8 0%, #4c1d95 100%);
+            border-color: rgba(216, 180, 254, 0.4);
+        }
+
+        .btn-vr:hover {
+            background: linear-gradient(135deg, #7e22ce 0%, #581c87 100%);
+            box-shadow: 0 6px 20px rgba(192, 132, 252, 0.4);
+        }
+
+        .settings-panel {
+            background: rgba(0,0,0,0.3);
+            padding: 20px;
+            border-radius: 16px;
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            text-align: left;
+            font-size: 0.9rem;
+        }
+
+        .setting-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        label {
+            color: #a8e6cf;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        select, input[type="range"] {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            padding: 8px;
+            border-radius: 8px;
+            outline: none;
+        }
+
+        /* In-Game HUD Elements */
+        #top-hud {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+        }
+
+        .compass-bar {
+            background: rgba(10, 20, 15, 0.65);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 20px;
+            padding: 8px 24px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            color: #a8e6cf;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .hud-card {
+            background: rgba(10, 20, 15, 0.65);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 16px;
+            padding: 12px 20px;
+            color: #ffffff;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        #bottom-hud {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            width: 100%;
+        }
+
+        .controls-hint {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.8);
+            line-height: 1.6;
+        }
+
+        .controls-hint span {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #fff;
+            font-weight: bold;
+        }
+
+        .location-banner {
+            position: absolute;
+            top: 15%;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            opacity: 0;
+            transition: opacity 1s ease;
+            pointer-events: none;
+        }
+
+        .location-banner h2 {
+            font-size: 2.2rem;
+            letter-spacing: 6px;
+            font-weight: 300;
+            color: #ffffff;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.7);
+        }
+
+        .location-banner p {
+            font-size: 1rem;
+            color: #a8e6cf;
+            letter-spacing: 2px;
+        }
+
+        /* Audio Control Panel Floating */
+        .audio-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .icon-btn {
+            background: rgba(10, 20, 15, 0.65);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .icon-btn:hover {
+            background: rgba(40, 80, 60, 0.8);
+            transform: scale(1.05);
+        }
+
+        /* Crosshair */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 6px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            box-shadow: 0 0 4px rgba(0,0,0,0.5);
+        }
+
+        /* VR Mode active override */
+        .webxr-hidden {
+            display: none !important;
+        }
+    </style>
+
+    <!-- Three.js CDN and Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <!-- Crosshair for Desktop Aiming -->
+    <div id="crosshair"></div>
+
+    <!-- Start Overlay Screen -->
+    <div id="start-screen">
+        <div class="title-card">
+            <h1>WILD HORIZONS</h1>
+            <div class="subtitle">A Peaceful Nature Exploration</div>
+            
+            <div class="button-group">
+                <button class="btn interactive" id="btn-explore">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20M2 12h20"/></svg>
+                    Explore Desktop
+                </button>
+                <button class="btn btn-vr interactive" id="btn-vr-start">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 8a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-4.5L13.5 20h-3L8.5 18H4a2 2 0 0 1-2-2V8z"/><circle cx="7" cy="12" r="2"/><circle cx="17" cy="12" r="2"/></svg>
+                    Enter VR (Quest 3)
+                </button>
+            </div>
+
+            <div class="settings-panel interactive">
+                <div class="setting-item">
+                    <label for="graphics-quality">Graphics Quality</label>
+                    <select id="graphics-quality">
+                        <option value="high" selected>High (PBR + Shadows)</option>
+                        <option value="medium">Medium (Balanced)</option>
+                        <option value="low">Low (Fast / Standalone VR)</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label for="volume-slider">Master Volume</label>
+                    <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="0.7">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main In-Game HUD -->
+    <div class="ui-layer" id="game-hud" style="display: none;">
+        <div id="top-hud">
+            <div class="compass-bar">
+                <span id="compass-dir">N</span>
+                <span style="opacity: 0.4;">|</span>
+                <span id="location-name">Emerald Meadow</span>
+            </div>
+
+            <div class="audio-controls interactive">
+                <button class="icon-btn" id="btn-toggle-music" title="Toggle Music">🎵</button>
+                <button class="icon-btn" id="btn-toggle-nature" title="Toggle Nature Sounds">🌿</button>
+                <button class="icon-btn" id="btn-reset-pos" title="Reset Position">🧭</button>
+            </div>
+        </div>
+
+        <div class="location-banner" id="location-banner">
+            <h2 id="banner-title">DISCOVERED</h2>
+            <p id="banner-sub">Crystal River</p>
+        </div>
+
+        <div id="bottom-hud">
+            <div class="hud-card controls-hint">
+                <span>W A S D</span> Walk &nbsp;|&nbsp; 
+                <span>SHIFT</span> Run &nbsp;|&nbsp; 
+                <span>SPACE</span> Jump &nbsp;|&nbsp; 
+                <span>V</span> Camera Toggle &nbsp;|&nbsp; 
+                <span>ESC</span> Unlock Mouse
+            </div>
+            <div class="hud-card" style="font-size: 0.8rem; opacity: 0.8;" id="fps-counter">
+                60 FPS
+            </div>
+        </div>
+    </div>
+
+    <!-- Fast Inline Simplex Noise Implementation for Fast Procedural Terrain -->
+    <script>
+        // Fast 2D/3D Simplex Noise generator
+        const SimplexNoise = function() {
+            var F3 = 1.0/3.0, G3 = 1.0/6.0;
+            var p = new Uint8Array(256);
+            for (var i=0; i<256; i++) p[i] = Math.floor(Math.random()*256);
+            var perm = new Uint8Array(512), permMod12 = new Uint8Array(512);
+            for (var i=0; i<512; i++) {
+                perm[i] = p[i & 255];
+                permMod12[i] = (perm[i] % 12);
+            }
+            return {
+                noise2D: function(xin, yin) {
+                    var n0, n1, n2;
+                    var s = (xin+yin)*0.5*(Math.sqrt(3.0)-1.0);
+                    var i = Math.floor(xin+s), j = Math.floor(yin+s);
+                    var t = (i+j)*(3.0-Math.sqrt(3.0))/6.0;
+                    var X0 = i-t, Y0 = j-t;
+                    var x0 = xin-X0, y0 = yin-Y0;
+                    var i1, j1;
+                    if(x0>y0) {i1=1; j1=0;} else {i1=0; j1=1;}
+                    var x1 = x0 - i1 + (3.0-Math.sqrt(3.0))/6.0, y1 = y0 - j1 + (3.0-Math.sqrt(3.0))/6.0;
+                    var x2 = x0 - 1.0 + 2.0*(3.0-Math.sqrt(3.0))/6.0, y2 = y0 - 1.0 + 2.0*(3.0-Math.sqrt(3.0))/6.0;
+                    var ii = i & 255, jj = j & 255;
+                    var gi0 = permMod12[ii+perm[jj]], gi1 = permMod12[ii+i1+perm[jj+j1]], gi2 = permMod12[ii+1+perm[jj+1]];
+                    var t0 = 0.5 - x0*x0-y0*y0; if(t0<0) n0 = 0.0; else { t0 *= t0; n0 = t0 * t0 * (gi0%2 === 0 ? 1 : -1)*(x0 + y0); }
+                    var t1 = 0.5 - x1*x1-y1*y1; if(t1<0) n1 = 0.0; else { t1 *= t1; n1 = t1 * t1 * (gi1%2 === 0 ? 1 : -1)*(x1 + y1); }
+                    var t2 = 0.5 - x2*x2-y2*y2; if(t2<0) n2 = 0.0; else { t2 *= t2; n2 = t2 * t2 * (gi2%2 === 0 ? 1 : -1)*(x2 + y2); }
+                    return 70.0 * (n0 + n1 + n2);
+                }
+            };
+        };
+        const simplex = SimplexNoise();
+    </script>
+
+    <!-- MAIN GAME ENGINE & LOGIC SCRIPT -->
+    <script>
+        /* =========================================================================
+           GLOBAL GAME CONFIGURATION & STATE
+           ========================================================================= */
+        const CONFIG = {
+            worldSize: 600,
+            terrainSegments: 180,
+            maxHeight: 65,
+            waterLevel: 4.5,
+            gravity: -24.0,
+            playerHeight: 1.75,
+            speedWalk: 6.5,
+            speedRun: 12.0,
+            jumpForce: 8.5
+        };
+
+        let qualityTier = 'high'; // high, medium, low
+        let scene, camera, renderer, clock;
+        let terrainGeometry, terrainMesh, waterMesh, waterfallMesh;
+        let playerGroup, cameraHolder;
+        let isThirdPerson = false;
+        
+        // Input state
+        const keys = {};
+        let isPointerLocked = false;
+        let yaw = 0, pitch = 0;
+
+        // Player Physics State
+        const player = {
+            position: new THREE.Vector3(0, 10, 30),
+            velocity: new THREE.Vector3(),
+            onGround: false,
+            radius: 0.6
+        };
+
+        // Landmarks definition
+        const LANDMARKS = [
+            { name: "Emerald Valley", pos: new THREE.Vector3(0, 0, 30), desc: "A quiet, grassy meadow surrounded by pine forests." },
+            { name: "Crystal River", pos: new THREE.Vector3(-40, 0, -10), desc: "Pure mountain waters winding through the cliffs." },
+            { name: "Echo Waterfall", pos: new THREE.Vector3(120, 22, -110), desc: "Cascading roar of fresh mountain springs." },
+            { name: "Pine Ridge Viewpoint", pos: new THREE.Vector3(-140, 38, -130), desc: "High mountain overlook across the whole wilderness." }
+        ];
+        let currentLandmark = null;
+
+        // Instanced meshes references
+        let instancedTrees, instancedPines, instancedRocks, instancedGrass, instancedFlowers;
+        let particleSystem, waterfallParticles;
+
+        /* =========================================================================
+           PROCEDURAL WEB AUDIO SYNTHESIZER
+           ========================================================================= */
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.masterGain = null;
+                this.musicGain = null;
+                this.natureGain = null;
+                this.musicEnabled = true;
+                this.natureEnabled = true;
+                this.initialized = false;
+                this.timer = null;
+            }
+
+            init() {
+                if (this.initialized) return;
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                this.ctx = new AudioCtx();
+
+                this.masterGain = this.ctx.createGain();
+                this.masterGain.gain.value = 0.7;
+                this.masterGain.connect(this.ctx.destination);
+
+                this.musicGain = this.ctx.createGain();
+                this.musicGain.gain.value = 0.35;
+                this.musicGain.connect(this.masterGain);
+
+                this.natureGain = this.ctx.createGain();
+                this.natureGain.gain.value = 0.5;
+                this.natureGain.connect(this.masterGain);
+
+                this.startWindAmbience();
+                this.startRiverAmbience();
+                this.scheduleGenerativeMusic();
+                this.scheduleBirdChirps();
+
+                this.initialized = true;
+            }
+
+            setMasterVolume(val) {
+                if (this.masterGain) this.masterGain.gain.setTargetAtTime(val, this.ctx.currentTime, 0.1);
+            }
+
+            toggleMusic() {
+                this.musicEnabled = !this.musicEnabled;
+                if (this.musicGain) {
+                    this.musicGain.gain.setTargetAtTime(this.musicEnabled ? 0.35 : 0, this.ctx.currentTime, 0.2);
+                }
+                return this.musicEnabled;
+            }
+
+            toggleNature() {
+                this.natureEnabled = !this.natureEnabled;
+                if (this.natureGain) {
+                    this.natureGain.gain.setTargetAtTime(this.natureEnabled ? 0.5 : 0, this.ctx.currentTime, 0.2);
+                }
+                return this.natureEnabled;
+            }
+
+            // Procedural Wind (Pink Noise + Lowpass Filter LFO)
+            startWindAmbience() {
+                const bufferSize = 2 * this.ctx.sampleRate;
+                const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const output = noiseBuffer.getChannelData(0);
+                let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+
+                for (let i = 0; i < bufferSize; i++) {
+                    let white = Math.random() * 2 - 1;
+                    b0 = 0.99886 * b0 + white * 0.0555179;
+                    b1 = 0.99332 * b1 + white * 0.0750759;
+                    b2 = 0.96900 * b2 + white * 0.1538520;
+                    b3 = 0.86650 * b3 + white * 0.3104856;
+                    b4 = 0.55000 * b4 + white * 0.5329522;
+                    b5 = -0.7616 * b5 - white * 0.0168980;
+                    output[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+                    output[i] *= 0.11;
+                    b6 = white * 0.115926;
+                }
+
+                const whiteNoise = this.ctx.createBufferSource();
+                whiteNoise.buffer = noiseBuffer;
+                whiteNoise.loop = true;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.value = 350;
+
+                // LFO to sway wind frequency softly
+                const lfo = this.ctx.createOscillator();
+                lfo.frequency.value = 0.12;
+                const lfoGain = this.ctx.createGain();
+                lfoGain.gain.value = 200;
+
+                lfo.connect(lfoGain);
+                lfoGain.connect(filter.frequency);
+                whiteNoise.connect(filter);
+                filter.connect(this.natureGain);
+
+                whiteNoise.start();
+                lfo.start();
+            }
+
+            // Procedural River Noise (Bandpass Filtered Rushing Water)
+            startRiverAmbience() {
+                const bufferSize = this.ctx.sampleRate * 2;
+                const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const output = noiseBuffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    output[i] = Math.random() * 2 - 1;
+                }
+
+                const noiseSource = this.ctx.createBufferSource();
+                noiseSource.buffer = noiseBuffer;
+                noiseSource.loop = true;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.value = 800;
+                filter.Q.value = 0.8;
+
+                noiseSource.connect(filter);
+                filter.connect(this.natureGain);
+                noiseSource.start();
+            }
+
+            // Procedural Birdsong Chirp Generator
+            scheduleBirdChirps() {
+                const playChirp = () => {
+                    if (this.natureEnabled && this.ctx) {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        const now = this.ctx.currentTime;
+
+                        osc.type = 'sine';
+                        const startFreq = 2200 + Math.random() * 1200;
+                        osc.frequency.setValueAtTime(startFreq, now);
+                        osc.frequency.exponentialRampToValueAtTime(startFreq + (Math.random() > 0.5 ? 600 : -500), now + 0.12);
+
+                        gain.gain.setValueAtTime(0, now);
+                        gain.gain.linearRampToValueAtTime(0.08, now + 0.02);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+                        osc.connect(gain);
+                        gain.connect(this.natureGain);
+
+                        osc.start(now);
+                        osc.stop(now + 0.16);
+                    }
+                    setTimeout(playChirp, 3000 + Math.random() * 6000);
+                };
+                playChirp();
+            }
+
+            // Peaceful Pentatonic Ambient Piano/Pad Melodies
+            scheduleGenerativeMusic() {
+                const notes = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33]; // C Pentatonic Scale
+                const playChord = () => {
+                    if (this.musicEnabled && this.ctx) {
+                        const now = this.ctx.currentTime;
+                        const root = notes[Math.floor(Math.random() * notes.length)];
+                        
+                        [root, root * 1.25, root * 1.5].forEach((freq, idx) => {
+                            const osc = this.ctx.createOscillator();
+                            const gain = this.ctx.createGain();
+                            
+                            osc.type = 'sine';
+                            osc.frequency.value = freq / 2; // Warm low octaves
+
+                            gain.gain.setValueAtTime(0, now);
+                            gain.gain.linearRampToValueAtTime(0.06, now + 1.5 + idx * 0.2);
+                            gain.gain.exponentialRampToValueAtTime(0.0001, now + 6.0 + idx * 0.5);
+
+                            osc.connect(gain);
+                            gain.connect(this.musicGain);
+
+                            osc.start(now + idx * 0.2);
+                            osc.stop(now + 7.0);
+                        });
+                    }
+                    setTimeout(playChord, 5000 + Math.random() * 4000);
+                };
+                playChord();
+            }
+        }
+
+        const soundEngine = new SoundEngine();
+
+        /* =========================================================================
+           HEIGHTMAP & PROCEDURAL TERRAIN MATH
+           ========================================================================= */
+        function getTerrainHeight(x, z) {
+            // Layered Octaves of Simplex Noise
+            const scale1 = 0.004;
+            const scale2 = 0.012;
+            const scale3 = 0.035;
+
+            let n1 = simplex.noise2D(x * scale1, z * scale1);
+            let n2 = simplex.noise2D(x * scale2, z * scale2) * 0.5;
+            let n3 = simplex.noise2D(x * scale3, z * scale3) * 0.15;
+
+            let h = (n1 + n2 + n3) * (CONFIG.maxHeight / 1.6);
+
+            // Carve River Valley
+            const riverX = Math.sin(z * 0.015) * 40 - 30;
+            const distToRiver = Math.abs(x - riverX);
+            if (distToRiver < 35) {
+                const carve = Math.cos((distToRiver / 35) * Math.PI * 0.5);
+                h -= carve * carve * 22.0;
+            }
+
+            // Waterfall cliff formation at z = -110
+            if (z < -90 && z > -130 && x > 80 && x < 150) {
+                const cliffFactor = Math.min(1, Math.max(0, (z + 90) / -20));
+                h += cliffFactor * 28;
+            }
+
+            return Math.max(-2, h);
+        }
+
+        /* =========================================================================
+           SCENE & ENVIRONMENT SETUP
+           ========================================================================= */
+        function initScene() {
+            const container = document.getElementById('canvas-container');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xcce0ff);
+            scene.fog = new THREE.FogExp2(0xcce0ff, 0.0035);
+
+            camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+            // Rig for player and camera rotation
+            playerGroup = new THREE.Group();
+            cameraHolder = new THREE.Group();
+            cameraHolder.position.y = CONFIG.playerHeight;
+            playerGroup.add(cameraHolder);
+            cameraHolder.add(camera);
+            scene.add(playerGroup);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.05;
+            renderer.xr.enabled = true; // WebXR Meta Quest 3 support
+
+            container.appendChild(renderer.domElement);
+
+            clock = new THREE.Clock();
+
+            setupLighting();
+            buildTerrain();
+            buildWaterAndWaterfall();
+            buildInstancedFoliage();
+            buildParticles();
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize);
+            setupDesktopControls();
+            setupWebXR();
+        }
+
+        /* =========================================================================
+           LIGHTING & SKY DOME
+           ========================================================================= */
+        function setupLighting() {
+            const ambientLight = new THREE.AmbientLight(0xd4e6f1, 0.65);
+            scene.add(ambientLight);
+
+            const sunLight = new THREE.DirectionalLight(0xfffaed, 1.25);
+            sunLight.position.set(150, 200, 100);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 2048;
+            sunLight.shadow.mapSize.height = 2048;
+            sunLight.shadow.camera.near = 0.5;
+            sunLight.shadow.camera.far = 500;
+            const d = 150;
+            sunLight.shadow.camera.left = -d;
+            sunLight.shadow.camera.right = d;
+            sunLight.shadow.camera.top = d;
+            sunLight.shadow.camera.bottom = -d;
+            sunLight.shadow.bias = -0.0005;
+            scene.add(sunLight);
+
+            // Atmospheric Gradient Sky Dome
+            const skyGeo = new THREE.SphereGeometry(800, 32, 15);
+            const skyMat = new THREE.ShaderMaterial({
+                uniforms: {
+                    topColor: { value: new THREE.Color(0x3a7bd5) },
+                    bottomColor: { value: new THREE.Color(0xdfe9f3) },
+                    offset: { value: 30 },
+                    exponent: { value: 0.6 }
+                },
+                vertexShader: `
+                    varying vec3 vWorldPosition;
+                    void main() {
+                        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+                        vWorldPosition = worldPosition.xyz;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform vec3 topColor;
+                    uniform vec3 bottomColor;
+                    uniform float offset;
+                    uniform float exponent;
+                    varying vec3 vWorldPosition;
+                    void main() {
+                        float h = normalize(vWorldPosition + offset).y;
+                        gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+                    }
+                `,
+                side: THREE.BackSide
+            });
+            scene.add(new THREE.Mesh(skyGeo, skyMat));
+        }
+
+        /* =========================================================================
+           PROCEDURAL TERRAIN WITH VERTEX COLORS
+           ========================================================================= */
+        function buildTerrain() {
+            terrainGeometry = new THREE.PlaneGeometry(
+                CONFIG.worldSize, CONFIG.worldSize,
+                CONFIG.terrainSegments, CONFIG.terrainSegments
+            );
+            terrainGeometry.rotateX(-Math.PI / 2);
+
+            const posAttr = terrainGeometry.attributes.position;
+            const colors = [];
+
+            const grassColor = new THREE.Color(0x4a7c59);
+            const darkGrass = new THREE.Color(0x2d5a3f);
+            const rockColor = new THREE.Color(0x6c757d);
+            const sandColor = new THREE.Color(0xc2b280);
+
+            for (let i = 0; i < posAttr.count; i++) {
+                const x = posAttr.getX(i);
+                const z = posAttr.getZ(i);
+                const y = getTerrainHeight(x, z);
+
+                posAttr.setY(i, y);
+
+                // Calculate Color based on Slope and Height
+                const slope = Math.abs(simplex.noise2D(x * 0.05, z * 0.05));
+                let vertexColor = new THREE.Color();
+
+                if (y < CONFIG.waterLevel + 1.2) {
+                    vertexColor.lerpColors(sandColor, grassColor, Math.max(0, (y - CONFIG.waterLevel) / 1.2));
+                } else if (y > 28 || slope > 0.65) {
+                    vertexColor.copy(rockColor);
+                } else {
+                    vertexColor.lerpColors(grassColor, darkGrass, Math.sin(x * 0.02 + z * 0.02) * 0.5 + 0.5);
+                }
+
+                colors.push(vertexColor.r, vertexColor.g, vertexColor.b);
+            }
+
+            terrainGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            terrainGeometry.computeVertexNormals();
+
+            const terrainMat = new THREE.MeshStandardMaterial({
+                vertexColors: true,
+                roughness: 0.85,
+                metalness: 0.1,
+                flatShading: false
+            });
+
+            terrainMesh = new THREE.Mesh(terrainGeometry, terrainMat);
+            terrainMesh.receiveShadow = true;
+            terrainMesh.castShadow = true;
+            scene.add(terrainMesh);
+        }
+
+        /* =========================================================================
+           FLOWING WATER & WATERFALL SHADERS
+           ========================================================================= */
+        function buildWaterAndWaterfall() {
+            // River Plane
+            const riverGeo = new THREE.PlaneGeometry(CONFIG.worldSize, CONFIG.worldSize, 64, 64);
+            riverGeo.rotateX(-Math.PI / 2);
+
+            const waterMat = new THREE.MeshStandardMaterial({
+                color: 0x1a5e7a,
+                roughness: 0.1,
+                metalness: 0.8,
+                transparent: true,
+                opacity: 0.75
+            });
+
+            waterMesh = new THREE.Mesh(riverGeo, waterMat);
+            waterMesh.position.y = CONFIG.waterLevel;
+            scene.add(waterMesh);
+
+            // Tall Animated Waterfall Plane
+            const waterfallGeo = new THREE.PlaneGeometry(24, 32, 16, 16);
+            const waterfallMat = new THREE.MeshStandardMaterial({
+                color: 0x88e0ef,
+                roughness: 0.2,
+                transparent: true,
+                opacity: 0.85
+            });
+
+            waterfallMesh = new THREE.Mesh(waterfallGeo, waterfallMat);
+            waterfallMesh.position.set(120, 16, -110);
+            waterfallMesh.rotation.y = Math.PI / 4;
+            scene.add(waterfallMesh);
+        }
+
+        /* =========================================================================
+           INSTANCED FOLIAGE & ROCKS (HIGH PERFORMANCE)
+           ========================================================================= */
+        function buildInstancedFoliage() {
+            const countPines = qualityTier === 'low' ? 250 : 600;
+            const countGrass = qualityTier === 'low' ? 800 : (qualityTier === 'medium' ? 2000 : 4000);
+
+            // Cone Pine Tree Model
+            const pineTrunkGeo = new THREE.CylinderGeometry(0.3, 0.5, 3, 6);
+            const pineFoliageGeo = new THREE.ConeGeometry(2.5, 8, 6);
+            pineFoliageGeo.translate(0, 5.5, 0);
+
+            const pineMat = new THREE.MeshStandardMaterial({ color: 0x1b4332, roughness: 0.8 });
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3728, roughness: 0.9 });
+
+            instancedPines = new THREE.InstancedMesh(pineFoliageGeo, pineMat, countPines);
+            instancedPines.castShadow = true;
+            instancedPines.receiveShadow = true;
+
+            const dummy = new THREE.Object3D();
+            let addedPines = 0;
+
+            for (let i = 0; i < countPines * 2 && addedPines < countPines; i++) {
+                const x = (Math.random() - 0.5) * (CONFIG.worldSize - 60);
+                const z = (Math.random() - 0.5) * (CONFIG.worldSize - 60);
+                const y = getTerrainHeight(x, z);
+
+                if (y > CONFIG.waterLevel + 1.5 && y < 35) {
+                    const scale = 0.7 + Math.random() * 0.7;
+                    dummy.position.set(x, y, z);
+                    dummy.rotation.y = Math.random() * Math.PI * 2;
+                    dummy.scale.set(scale, scale, scale);
+                    dummy.updateMatrix();
+
+                    instancedPines.setMatrixAt(addedPines, dummy.matrix);
+                    addedPines++;
+                }
+            }
+            scene.add(instancedPines);
+
+            // Instanced Grass Blades
+            const grassGeo = new THREE.ConeGeometry(0.15, 1.2, 3);
+            grassGeo.translate(0, 0.6, 0);
+            const grassMat = new THREE.MeshStandardMaterial({ color: 0x52b788, roughness: 0.6 });
+
+            instancedGrass = new THREE.InstancedMesh(grassGeo, grassMat, countGrass);
+            let addedGrass = 0;
+
+            for (let i = 0; i < countGrass * 2 && addedGrass < countGrass; i++) {
+                const x = (Math.random() - 0.5) * (CONFIG.worldSize - 40);
+                const z = (Math.random() - 0.5) * (CONFIG.worldSize - 40);
+                const y = getTerrainHeight(x, z);
+
+                if (y > CONFIG.waterLevel + 0.8 && y < 25) {
+                    dummy.position.set(x, y, z);
+                    dummy.rotation.y = Math.random() * Math.PI * 2;
+                    dummy.scale.set(1, 0.8 + Math.random() * 0.6, 1);
+                    dummy.updateMatrix();
+
+                    instancedGrass.setMatrixAt(addedGrass, dummy.matrix);
+                    addedGrass++;
+                }
+            }
+            scene.add(instancedGrass);
+        }
+
+        /* =========================================================================
+           ATMOSPHERIC DUST & WATERFALL SPRAY PARTICLES
+           ========================================================================= */
+        function buildParticles() {
+            const particleCount = 400;
+            const geo = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+
+            for (let i = 0; i < particleCount * 3; i += 3) {
+                positions[i] = (Math.random() - 0.5) * 200;
+                positions[i + 1] = Math.random() * 20 + 2;
+                positions[i + 2] = (Math.random() - 0.5) * 200;
+            }
+
+            geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            const mat = new THREE.PointsMaterial({
+                color: 0xffffff,
+                size: 0.3,
+                transparent: true,
+                opacity: 0.4
+            });
+
+            particleSystem = new THREE.Points(geo, mat);
+            scene.add(particleSystem);
+        }
+
+        /* =========================================================================
+           DESKTOP CONTROLS & POINTER LOCK
+           ========================================================================= */
+        function setupDesktopControls() {
+            document.addEventListener('keydown', (e) => {
+                keys[e.code] = true;
+                if (e.code === 'KeyV') {
+                    isThirdPerson = !isThirdPerson;
+                    camera.position.set(0, 0, 0);
+                    if (isThirdPerson) camera.position.set(0, 2, 5);
+                }
+            });
+
+            document.addEventListener('keyup', (e) => {
+                keys[e.code] = false;
+            });
+
+            const canvas = renderer.domElement;
+            canvas.addEventListener('click', () => {
+                if (!isPointerLocked && !renderer.xr.isPresenting) {
+                    canvas.requestPointerLock();
+                }
+            });
+
+            document.addEventListener('pointerlockchange', () => {
+                isPointerLocked = (document.pointerLockElement === canvas);
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isPointerLocked) return;
+
+                const sensitivity = 0.0022;
+                yaw -= e.movementX * sensitivity;
+                pitch -= e.movementY * sensitivity;
+
+                pitch = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, pitch));
+
+                playerGroup.rotation.y = yaw;
+                cameraHolder.rotation.x = pitch;
+            });
+        }
+
+        /* =========================================================================
+           WEBXR META QUEST 3 VR INTEGRATION
+           ========================================================================= */
+        function setupWebXR() {
+            const btnVR = document.getElementById('btn-vr-start');
+
+            if ('xr' in navigator) {
+                navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+                    if (!supported) {
+                        btnVR.style.opacity = '0.5';
+                        btnVR.innerText = 'VR Not Available';
+                    }
+                });
+            } else {
+                btnVR.style.opacity = '0.5';
+                btnVR.innerText = 'WebXR Unsupported';
+            }
+
+            btnVR.addEventListener('click', () => {
+                if (navigator.xr) {
+                    soundEngine.init();
+                    navigator.xr.requestSession('immersive-vr', {
+                        optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking']
+                    }).then((session) => {
+                        renderer.xr.setSession(session);
+                        document.getElementById('start-screen').classList.add('webxr-hidden');
+                        document.getElementById('game-hud').classList.add('webxr-hidden');
+                    });
+                }
+            });
+        }
+
+        /* =========================================================================
+           GAME LOOP & PHYSICS UPDATES
+           ========================================================================= */
+        function updatePlayer(delta) {
+            if (renderer.xr.isPresenting) {
+                // VR Thumbstick Movement Logic
+                const session = renderer.xr.getSession();
+                if (session) {
+                    for (const source of session.inputSources) {
+                        if (source.gamepad) {
+                            const axes = source.gamepad.axes;
+                            // Left stick: Movement (axes 2, 3 or 0, 1)
+                            if (source.handedness === 'left') {
+                                const moveX = axes[2] || axes[0] || 0;
+                                const moveZ = axes[3] || axes[1] || 0;
+                                
+                                const moveVector = new THREE.Vector3(moveX, 0, moveZ);
+                                moveVector.applyQuaternion(playerGroup.quaternion);
+                                player.position.addScaledVector(moveVector, CONFIG.speedWalk * delta);
+                            }
+                            // Right stick: Smooth Snap Turn
+                            if (source.handedness === 'right') {
+                                const turnX = axes[2] || axes[0] || 0;
+                                if (Math.abs(turnX) > 0.5) {
+                                    playerGroup.rotation.y -= Math.sign(turnX) * 1.5 * delta;
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Desktop Keyboard Movement
+                const speed = keys['ShiftLeft'] || keys['ShiftRight'] ? CONFIG.speedRun : CONFIG.speedWalk;
+                const moveDir = new THREE.Vector3();
+
+                if (keys['KeyW']) moveDir.z -= 1;
+                if (keys['KeyS']) moveDir.z += 1;
+                if (keys['KeyA']) moveDir.x -= 1;
+                if (keys['KeyD']) moveDir.x += 1;
+
+                moveDir.normalize();
+                moveDir.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+
+                player.velocity.x = moveDir.x * speed;
+                player.velocity.z = moveDir.z * speed;
+
+                // Jump
+                if (keys['Space'] && player.onGround) {
+                    player.velocity.y = CONFIG.jumpForce;
+                    player.onGround = false;
+                }
+
+                // Apply Gravity
+                player.velocity.y += CONFIG.gravity * delta;
+
+                // Move Player
+                player.position.x += player.velocity.x * delta;
+                player.position.y += player.velocity.y * delta;
+                player.position.z += player.velocity.z * delta;
+            }
+
+            // Terrain Height Collision & Snapping
+            const groundY = getTerrainHeight(player.position.x, player.position.z);
+            if (player.position.y <= groundY + CONFIG.playerHeight) {
+                player.position.y = groundY + CONFIG.playerHeight;
+                player.velocity.y = 0;
+                player.onGround = true;
+            }
+
+            // Prevent walking outside world boundaries
+            const bound = CONFIG.worldSize / 2 - 10;
+            player.position.x = Math.max(-bound, Math.min(bound, player.position.x));
+            player.position.z = Math.max(-bound, Math.min(bound, player.position.z));
+
+            // Sync Three.js player object
+            playerGroup.position.copy(player.position);
+
+            // Update Compass & Landmark Distance UI
+            updateHUD();
+        }
+
+        /* =========================================================================
+           HUD & UI UPDATES
+           ========================================================================= */
+        function updateHUD() {
+            if (renderer.xr.isPresenting) return;
+
+            // Compass Cardinal Direction
+            const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+            const angle = playerGroup.rotation.y % (Math.PI * 2);
+            const index = Math.round(((angle < 0 ? angle + Math.PI * 2 : angle) / (Math.PI * 2)) * 8) % 8;
+            document.getElementById('compass-dir').innerText = dirs[index];
+
+            // Check Landmark Proximity
+            LANDMARKS.forEach(lm => {
+                const dist = player.position.distanceTo(lm.pos);
+                if (dist < 25 && currentLandmark !== lm.name) {
+                    currentLandmark = lm.name;
+                    document.getElementById('location-name').innerText = lm.name;
+                    showBanner(lm.name, lm.desc);
+                }
+            });
+        }
+
+        function showBanner(title, desc) {
+            const banner = document.getElementById('location-banner');
+            document.getElementById('banner-title').innerText = title;
+            document.getElementById('banner-sub').innerText = desc;
+            banner.style.opacity = '1';
+            setTimeout(() => { banner.style.opacity = '0'; }, 4000);
+        }
+
+        /* =========================================================================
+           MAIN ANIMATION / RENDER LOOP
+           ========================================================================= */
+        function animate() {
+            renderer.setAnimationLoop(() => {
+                const delta = Math.min(clock.getDelta(), 0.1);
+
+                updatePlayer(delta);
+
+                // Animate Water Surfaces
+                if (waterMesh) {
+                    waterMesh.position.y = CONFIG.waterLevel + Math.sin(clock.getElapsedTime() * 1.5) * 0.1;
+                }
+
+                // Dynamic Particle Float
+                if (particleSystem) {
+                    particleSystem.rotation.y += 0.02 * delta;
+                }
+
+                renderer.render(scene, camera);
+            });
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        /* =========================================================================
+           UI BUTTON EVENT BINDINGS
+           ========================================================================= */
+        document.getElementById('btn-explore').addEventListener('click', () => {
+            soundEngine.init();
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('game-hud').style.display = 'flex';
+            document.getElementById('canvas-container').requestPointerLock();
+        });
+
+        document.getElementById('btn-toggle-music').addEventListener('click', (e) => {
+            const enabled = soundEngine.toggleMusic();
+            e.target.style.opacity = enabled ? '1' : '0.4';
+        });
+
+        document.getElementById('btn-toggle-nature').addEventListener('click', (e) => {
+            const enabled = soundEngine.toggleNature();
+            e.target.style.opacity = enabled ? '1' : '0.4';
+        });
+
+        document.getElementById('btn-reset-pos').addEventListener('click', () => {
+            player.position.set(0, 10, 30);
+            player.velocity.set(0, 0, 0);
+        });
+
+        document.getElementById('volume-slider').addEventListener('input', (e) => {
+            soundEngine.setMasterVolume(parseFloat(e.target.value));
+        });
+
+        document.getElementById('graphics-quality').addEventListener('change', (e) => {
+            qualityTier = e.target.value;
+            if (qualityTier === 'low') {
+                renderer.shadowMap.enabled = false;
+                scene.fog.density = 0.006;
+            } else {
+                renderer.shadowMap.enabled = true;
+                scene.fog.density = 0.0035;
+            }
+        });
+
+        // Initialize application on window load
+        window.onload = () => {
+            initScene();
+            animate();
+        };
+    </script>
+</body>
+</html>
