@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Premium VR Golf</title>
+    <!-- Tailwind CSS for modern HUD styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Three.js r128 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- OrbitControls -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+            background-color: #050b14;
+        }
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        /* Custom progress styling for power bar */
+        #power-bar-fill {
+            transition: height 0.05s ease-out;
+        }
+    </style>
+</head>
+<body class="text-white">
+    <!-- WebGL Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- UI Overlay Layer -->
+    <div id="ui-layer" class="relative z-10 w-full h-full pointer-events-none flex flex-col justify-between p-4 sm:p-6">
+        
+        <!-- Top Bar: Hole Info & Wind & Score -->
+        <div class="flex justify-between items-start w-full gap-4">
+            <!-- Hole Stats -->
+            <div class="glass-panel p-4 rounded-2xl flex items-center gap-4 pointer-events-auto">
+                <div class="text-center border-r border-slate-700 pr-4">
+                    <div class="text-xs text-emerald-400 font-bold uppercase tracking-wider">Hole</div>
+                    <div id="hud-hole-num" class="text-3xl font-black">1</div>
+                </div>
+                <div class="text-center border-r border-slate-700 pr-4">
+                    <div class="text-xs text-slate-400 font-semibold uppercase">Par</div>
+                    <div id="hud-hole-par" class="text-2xl font-bold">4</div>
+                </div>
+                <div class="text-center border-r border-slate-700 pr-4">
+                    <div class="text-xs text-slate-400 font-semibold uppercase">Strokes</div>
+                    <div id="hud-strokes" class="text-2xl font-bold text-amber-400">0</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-xs text-slate-400 font-semibold uppercase">Pin Dist</div>
+                    <div id="hud-distance" class="text-2xl font-bold text-sky-400">320 yds</div>
+                </div>
+            </div>
+
+            <!-- Wind Indicator -->
+            <div class="glass-panel p-3 rounded-2xl flex items-center gap-3 pointer-events-auto">
+                <div class="flex flex-col items-center">
+                    <span class="text-xs text-slate-400 font-semibold uppercase">Wind</span>
+                    <span id="hud-wind-speed" class="text-sm font-bold text-teal-300">8 mph</span>
+                </div>
+                <div id="hud-wind-arrow" class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center transition-transform duration-500">
+                    <i class="fa-solid fa-arrow-up text-teal-400 text-lg"></i>
+                </div>
+            </div>
+
+            <!-- Camera & Bag Controls -->
+            <div class="flex gap-2 pointer-events-auto">
+                <button id="btn-camera-mode" class="glass-panel hover:bg-slate-700/60 transition p-3 rounded-xl flex items-center gap-2 text-sm font-semibold">
+                    <i class="fa-solid fa-camera"></i>
+                    <span id="cam-mode-text" class="hidden sm:inline">Follow Cam</span>
+                </button>
+                <button id="btn-scorecard" class="glass-panel hover:bg-slate-700/60 transition p-3 rounded-xl flex items-center gap-2 text-sm font-semibold">
+                    <i class="fa-solid fa-clipboard"></i>
+                    <span class="hidden sm:inline">Scorecard</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Bottom Controls Bar -->
+        <div class="flex justify-between items-end w-full">
+            <!-- Minimap -->
+            <div class="glass-panel p-2 rounded-2xl pointer-events-auto relative overflow-hidden hidden sm:block border border-slate-700">
+                <canvas id="minimap-canvas" width="140" height="140" class="rounded-xl"></canvas>
+            </div>
+
+            <!-- Swing & Aim Controls -->
+            <div class="flex flex-col items-center gap-3 pointer-events-auto">
+                <!-- Club Selection -->
+                <div class="glass-panel px-4 py-2 rounded-full flex items-center gap-4 border border-slate-700">
+                    <button id="btn-club-prev" class="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300 hover:text-white transition">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </button>
+                    <div class="text-center min-w-[120px]">
+                        <div id="hud-club-name" class="font-bold text-amber-400 text-base">Driver</div>
+                        <div id="hud-club-range" class="text-xs text-slate-400">Max ~250 yds</div>
+                    </div>
+                    <button id="btn-club-next" class="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300 hover:text-white transition">
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                </div>
+
+                <!-- Desktop Swing Button & Helper -->
+                <div class="flex items-center gap-4">
+                    <button id="btn-swing" class="px-8 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-lg rounded-2xl shadow-lg shadow-emerald-500/20 active:scale-95 transition flex items-center gap-2">
+                        <i class="fa-solid fa-golf-ball-tee"></i>
+                        <span id="swing-btn-text">HOLD TO POWER</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Power Gauge (Vertical) -->
+            <div class="glass-panel p-2 rounded-2xl pointer-events-auto flex flex-col items-center justify-end h-44 w-12 border border-slate-700">
+                <div class="w-4 bg-slate-800/80 rounded-full h-full relative overflow-hidden flex flex-col justify-end">
+                    <div id="power-bar-fill" class="w-full bg-gradient-to-t from-emerald-500 via-amber-400 to-red-500 rounded-b-full h-0"></div>
+                </div>
+                <span id="hud-power-val" class="text-[10px] font-bold text-slate-400 mt-1">0%</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scorecard Modal -->
+    <div id="scorecard-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center hidden p-4">
+        <div class="glass-panel max-w-md w-full p-6 rounded-3xl border border-slate-700">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-black text-emerald-400 flex items-center gap-2">
+                    <i class="fa-solid fa-trophy"></i> Course Scorecard
+                </h2>
+                <button id="btn-close-scorecard" class="text-slate-400 hover:text-white text-xl">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-3 mb-6">
+                <div class="grid grid-cols-4 text-xs font-bold uppercase text-slate-400 pb-2 border-b border-slate-800 text-center">
+                    <span>Hole</span>
+                    <span>Par</span>
+                    <span>Strokes</span>
+                    <span>Result</span>
+                </div>
+                <div id="scorecard-rows" class="space-y-2">
+                    <!-- Rows rendered dynamically -->
+                </div>
+            </div>
+
+            <div class="p-4 bg-slate-800/50 rounded-2xl flex justify-between items-center border border-slate-700/50">
+                <span class="font-bold text-slate-300">Total Score</span>
+                <span id="scorecard-total" class="text-2xl font-black text-amber-400">E (0)</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- VR WebXR Button Container Injection -->
+    <div id="vr-btn-holder" class="fixed bottom-6 right-6 z-40"></div>
+
+    <!-- Main Logic Script -->
+    <script>
+        // --- Web Audio API Procedural Sound Effects ---
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+            }
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) this.ctx = new AudioCtx();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+            playSwing() {
+                this.init(); if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.25);
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.25);
+            }
+            playImpact(powerRatio = 0.8) {
+                this.init(); if (!this.ctx) return;
+                const bufferSize = this.ctx.sampleRate * 0.08;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.value = 1200 * powerRatio;
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.8 * powerRatio, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+                noise.start();
+            }
+            playCup() {
+                this.init(); if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(300, this.ctx.currentTime + 0.2);
+                gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.2);
+            }
+            playWater() {
+                this.init(); if (!this.ctx) return;
+                const bufferSize = this.ctx.sampleRate * 0.4;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(600, this.ctx.currentTime);
+                filter.frequency.linearRampToValueAtTime(150, this.ctx.currentTime + 0.4);
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.6, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.4);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+                noise.start();
+            }
+            playSand() {
+                this.init(); if (!this.ctx) return;
+                const bufferSize = this.ctx.sampleRate * 0.15;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.value = 400;
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+                noise.start();
+            }
+        }
+        const sound = new SoundFX();
+
+        // --- Golf Bag Definition ---
+        const GOLF_BAG = [
+            { name: 'Driver', angle: 11, maxDist: 260, drag: 0.995, roll: 0.96 },
+            { name: '3-Wood', angle: 15, maxDist: 220, drag: 0.993, roll: 0.95 },
+            { name: '5-Iron', angle: 21, maxDist: 180, drag: 0.991, roll: 0.93 },
+            { name: '7-Iron', angle: 28, maxDist: 150, drag: 0.988, roll: 0.90 },
+            { name: '9-Iron', angle: 37, maxDist: 120, drag: 0.985, roll: 0.88 },
+            { name: 'Pitching Wedge', angle: 45, maxDist: 90, drag: 0.982, roll: 0.82 },
+            { name: 'Sand Wedge', angle: 56, maxDist: 60, drag: 0.980, roll: 0.75 },
+            { name: 'Putter', angle: 0, maxDist: 35, drag: 0.985, roll: 0.98 }
+        ];
+
+        // --- Holes Data ---
+        const HOLES_DATA = [
+            {
+                num: 1, par: 4,
+                tee: new THREE.Vector3(0, 0.2, 120),
+                pin: new THREE.Vector3(0, 0.2, -120),
+                fairwayCenter: new THREE.Vector3(0, 0, 0),
+                fairwayRadius: 28,
+                greenRadius: 14,
+                bunkers: [{ pos: new THREE.Vector3(18, 0, -60), radius: 8 }],
+                water: [{ pos: new THREE.Vector3(-35, -0.2, 20), radius: 15 }]
+            },
+            {
+                num: 2, par: 3,
+                tee: new THREE.Vector3(-80, 0.2, 80),
+                pin: new THREE.Vector3(-80, 0.2, -50),
+                fairwayCenter: new THREE.Vector3(-80, 0, 15),
+                fairwayRadius: 20,
+                greenRadius: 12,
+                bunkers: [
+                    { pos: new THREE.Vector3(-92, 0, -40), radius: 6 },
+                    { pos: new THREE.Vector3(-68, 0, -40), radius: 6 }
+                ],
+                water: [{ pos: new THREE.Vector3(-80, -0.2, 15), radius: 18 }]
+            },
+            {
+                num: 3, par: 5,
+                tee: new THREE.Vector3(100, 0.2, 160),
+                pin: new THREE.Vector3(110, 0.2, -160),
+                fairwayCenter: new THREE.Vector3(105, 0, 0),
+                fairwayRadius: 32,
+                greenRadius: 16,
+                bunkers: [
+                    { pos: new THREE.Vector3(90, 0, 40), radius: 10 },
+                    { pos: new THREE.Vector3(125, 0, -100), radius: 9 }
+                ],
+                water: [{ pos: new THREE.Vector3(140, -0.2, -20), radius: 22 }]
+            }
+        ];
+
+        // --- Global Game State ---
+        let currentHoleIdx = 0;
+        let selectedClubIdx = 0;
+        let strokeCount = 0;
+        const holeScores = [0, 0, 0];
+        
+        let wind = { speed: 8, angle: Math.random() * Math.PI * 2 };
+        let powerVal = 0;
+        let isPowerBuilding = false;
+        let powerDirection = 1;
+
+        // Ball Physics State
+        let ballPos = new THREE.Vector3();
+        let ballVel = new THREE.Vector3();
+        let isBallMoving = false;
+        let ballInWater = false;
+        let lastTeeOrSafePos = new THREE.Vector3();
+
+        // Camera States: 'follow', 'free', 'pin'
+        let cameraMode = 'follow';
+
+        // --- Three.js Globals ---
+        let scene, camera, renderer, controls;
+        let ballMesh, aimLine, clubMeshVR;
+        let currentTerrainGroup = null;
+        let pinMeshGroup = null;
+
+        // WebXR VR
+        let controller1, controller2;
+        let controllerGrip1, controllerGrip2;
+
+        // --- Initialization ---
+        window.addEventListener('DOMContentLoaded', () => {
+            initThreeJS();
+            initWebXR();
+            initEventListeners();
+            loadHole(0);
+            animate();
+        });
+
+        function initThreeJS() {
+            const container = document.getElementById('canvas-container');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb); // Sky blue
+            scene.fog = new THREE.FogExp2(0x87ceeb, 0.002);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 10);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.xr.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            // OrbitControls for desktop looking/aiming
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 - 0.01; // Don't go below ground
+            controls.minDistance = 2;
+            controls.maxDistance = 150;
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+
+            const sunLight = new THREE.DirectionalLight(0xffffff, 0.9);
+            sunLight.position.set(100, 150, 50);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 2048;
+            sunLight.shadow.mapSize.height = 2048;
+            sunLight.shadow.camera.near = 0.5;
+            sunLight.shadow.camera.far = 500;
+            const d = 150;
+            sunLight.shadow.camera.left = -d;
+            sunLight.shadow.camera.right = d;
+            sunLight.shadow.camera.top = d;
+            sunLight.shadow.camera.bottom = -d;
+            scene.add(sunLight);
+
+            // Create Golf Ball
+            const ballGeo = new THREE.SphereGeometry(0.2, 32, 32);
+            const ballMat = new THREE.MeshStandardMaterial({
+                color: 0xffffff,
+                roughness: 0.2,
+                metalness: 0.1
+            });
+            ballMesh = new THREE.Mesh(ballGeo, ballMat);
+            ballMesh.castShadow = true;
+            ballMesh.receiveShadow = true;
+            scene.add(ballMesh);
+
+            // Aiming Line
+            const lineGeo = new THREE.BufferGeometry();
+            const lineMat = new THREE.LineDashedMaterial({
+                color: 0xffd700,
+                dashSize: 1,
+                gapSize: 0.5,
+                linewidth: 3
+            });
+            aimLine = new THREE.Line(lineGeo, lineMat);
+            aimLine.visible = true;
+            scene.add(aimLine);
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function initWebXR() {
+            // Append VR Button with Inline WebXR Session Handling
+            const vrBtnHolder = document.getElementById('vr-btn-holder');
+            const vrBtn = document.createElement('button');
+            vrBtn.id = 'webxr-vr-button';
+            vrBtn.style.position = 'static';
+            vrBtn.style.padding = '12px 20px';
+            vrBtn.style.background = 'rgba(16, 185, 129, 0.8)';
+            vrBtn.style.border = '1px solid rgba(255,255,255,0.2)';
+            vrBtn.style.borderRadius = '16px';
+            vrBtn.style.color = '#ffffff';
+            vrBtn.style.fontWeight = 'bold';
+            vrBtn.style.cursor = 'pointer';
+
+            if ('xr' in navigator) {
+                navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+                    if (supported) {
+                        vrBtn.innerHTML = '<i class="fa-solid fa-vr-cardboard mr-2"></i> ENTER VR';
+                        vrBtn.addEventListener('click', onVRButtonClick);
+                    } else {
+                        vrBtn.innerHTML = 'VR NOT SUPPORTED';
+                        vrBtn.disabled = true;
+                        vrBtn.style.opacity = '0.5';
+                    }
+                }).catch(() => {
+                    vrBtn.innerHTML = 'VR NOT AVAILABLE';
+                    vrBtn.disabled = true;
+                    vrBtn.style.opacity = '0.5';
+                });
+            } else {
+                vrBtn.innerHTML = 'WEBXR NOT SUPPORTED';
+                vrBtn.disabled = true;
+                vrBtn.style.opacity = '0.5';
+            }
+
+            vrBtnHolder.appendChild(vrBtn);
+
+            // Setup VR Controllers
+            controller1 = renderer.xr.getController(0);
+            controller1.addEventListener('selectstart', onVRSelectStart);
+            controller1.addEventListener('selectend', onVRSelectEnd);
+            scene.add(controller1);
+
+            controller2 = renderer.xr.getController(1);
+            scene.add(controller2);
+
+            // VR Club Mesh attachment on right controller
+            const clubGroup = new THREE.Group();
+            const shaftGeo = new THREE.CylinderGeometry(0.015, 0.012, 1.0, 16);
+            const shaftMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8, roughness: 0.2 });
+            const shaft = new THREE.Mesh(shaftGeo, shaftMat);
+            shaft.position.y = -0.4;
+            clubGroup.add(shaft);
+
+            const headGeo = new THREE.BoxGeometry(0.08, 0.06, 0.12);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.5 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.set(0, -0.9, 0.04);
+            clubGroup.add(head);
+
+            clubMeshVR = clubGroup;
+            controller1.add(clubMeshVR);
+        }
+
+        let currentXRSession = null;
+        function onVRButtonClick() {
+            if (currentXRSession === null) {
+                const sessionInit = { optionalFeatures: ['local-floor', 'bounded-floor'] };
+                navigator.xr.requestSession('immersive-vr', sessionInit).then((session) => {
+                    currentXRSession = session;
+                    renderer.xr.setSession(session);
+                    document.getElementById('webxr-vr-button').innerHTML = '<i class="fa-solid fa-xmark mr-2"></i> EXIT VR';
+                    session.addEventListener('end', () => {
+                        currentXRSession = null;
+                        document.getElementById('webxr-vr-button').innerHTML = '<i class="fa-solid fa-vr-cardboard mr-2"></i> ENTER VR';
+                    });
+                }).catch((err) => {
+                    console.error('Failed to enter VR:', err);
+                });
+            } else {
+                currentXRSession.end();
+            }
+        }
+
+        // --- Procedural World & Hole Generation ---
+        function loadHole(idx) {
+            currentHoleIdx = idx;
+            const data = HOLES_DATA[idx];
+            strokeCount = 0;
+
+            if (currentTerrainGroup) scene.remove(currentTerrainGroup);
+            currentTerrainGroup = new THREE.Group();
+
+            // 1. Base Rough Terrain Mesh
+            const groundGeo = new THREE.PlaneGeometry(400, 500, 64, 64);
+            groundGeo.rotateX(-Math.PI / 2);
+            const posAttr = groundGeo.attributes.position;
+            for (let i = 0; i < posAttr.count; i++) {
+                const x = posAttr.getX(i);
+                const z = posAttr.getZ(i);
+                // Subtle hill elevation noise
+                const y = Math.sin(x * 0.03) * Math.cos(z * 0.03) * 1.5;
+                posAttr.setY(i, y);
+            }
+            groundGeo.computeVertexNormals();
+
+            const roughMat = new THREE.MeshStandardMaterial({ color: 0x2d5a27, roughness: 0.9, metalness: 0.1 });
+            const roughMesh = new THREE.Mesh(groundGeo, roughMat);
+            roughMesh.receiveShadow = true;
+            currentTerrainGroup.add(roughMesh);
+
+            // 2. Fairway Patch
+            const fairwayGeo = new THREE.CylinderGeometry(data.fairwayRadius, data.fairwayRadius, 0.1, 32);
+            const fairwayMat = new THREE.MeshStandardMaterial({ color: 0x4caf50, roughness: 0.6 });
+            const fairwayMesh = new THREE.Mesh(fairwayGeo, fairwayMat);
+            fairwayMesh.position.copy(data.fairwayCenter);
+            fairwayMesh.position.y = 0.05;
+            fairwayMesh.receiveShadow = true;
+            currentTerrainGroup.add(fairwayMesh);
+
+            // 3. Tee Box
+            const teeGeo = new THREE.BoxGeometry(6, 0.15, 6);
+            const teeMat = new THREE.MeshStandardMaterial({ color: 0x388e3c });
+            const teeMesh = new THREE.Mesh(teeGeo, teeMat);
+            teeMesh.position.copy(data.tee);
+            teeMesh.position.y = 0.08;
+            teeMesh.receiveShadow = true;
+            currentTerrainGroup.add(teeMesh);
+
+            // 4. Putting Green
+            const greenGeo = new THREE.CylinderGeometry(data.greenRadius, data.greenRadius, 0.12, 32);
+            const greenMat = new THREE.MeshStandardMaterial({ color: 0x66bb6a, roughness: 0.4 });
+            const greenMesh = new THREE.Mesh(greenGeo, greenMat);
+            greenMesh.position.copy(data.pin);
+            greenMesh.position.y = 0.06;
+            greenMesh.receiveShadow = true;
+            currentTerrainGroup.add(greenMesh);
+
+            // 5. Sand Bunkers
+            data.bunkers.forEach(b => {
+                const bGeo = new THREE.CylinderGeometry(b.radius, b.radius, 0.08, 24);
+                const bMat = new THREE.MeshStandardMaterial({ color: 0xe0cda3, roughness: 0.95 });
+                const bMesh = new THREE.Mesh(bGeo, bMat);
+                bMesh.position.copy(b.pos);
+                bMesh.position.y = 0.07;
+                bMesh.receiveShadow = true;
+                currentTerrainGroup.add(bMesh);
+            });
+
+            // 6. Water Hazards
+            data.water.forEach(w => {
+                const wGeo = new THREE.CylinderGeometry(w.radius, w.radius, 0.1, 24);
+                const wMat = new THREE.MeshStandardMaterial({ color: 0x1e88e5, roughness: 0.1, transparent: true, opacity: 0.8 });
+                const wMesh = new THREE.Mesh(wGeo, wMat);
+                wMesh.position.copy(w.pos);
+                wMesh.position.y = 0.02;
+                currentTerrainGroup.add(wMesh);
+            });
+
+            // 7. HIGHLY VISIBLE Flagstick & Flag
+            if (pinMeshGroup) scene.remove(pinMeshGroup);
+            pinMeshGroup = new THREE.Group();
+            pinMeshGroup.position.copy(data.pin);
+
+            // Striped Pole (Tall 8m)
+            const poleGeo = new THREE.CylinderGeometry(0.08, 0.08, 8, 16);
+            const poleMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.5 });
+            const poleMesh = new THREE.Mesh(poleGeo, poleMat);
+            poleMesh.position.y = 4;
+            poleMesh.castShadow = true;
+            pinMeshGroup.add(poleMesh);
+
+            // Top Gold Ball
+            const goldGeo = new THREE.SphereGeometry(0.3, 16, 16);
+            const goldMat = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.9, roughness: 0.1 });
+            const goldMesh = new THREE.Mesh(goldGeo, goldMat);
+            goldMesh.position.y = 8.1;
+            pinMeshGroup.add(goldMesh);
+
+            // High Contrast Bright Banner / Flag
+            const flagGeo = new THREE.PlaneGeometry(2.5, 1.4);
+            const flagMat = new THREE.MeshStandardMaterial({ color: 0xff1744, side: THREE.DoubleSide, roughness: 0.3 });
+            const flagMesh = new THREE.Mesh(flagGeo, flagMat);
+            flagMesh.position.set(1.25, 7.2, 0);
+            flagMesh.castShadow = true;
+            pinMeshGroup.add(flagMesh);
+
+            scene.add(pinMeshGroup);
+            scene.add(currentTerrainGroup);
+
+            // Reset Golf Ball
+            ballPos.copy(data.tee);
+            ballPos.y = 0.3;
+            lastTeeOrSafePos.copy(ballPos);
+            ballVel.set(0, 0, 0);
+            ballMesh.position.copy(ballPos);
+
+            // Randomize Wind
+            wind.speed = Math.floor(Math.random() * 12) + 3;
+            wind.angle = Math.random() * Math.PI * 2;
+
+            updateHUD();
+            resetCamera();
+        }
+
+        // --- Camera Management ---
+        function resetCamera() {
+            if (renderer.xr.isPresenting) return;
+            const club = GOLF_BAG[selectedClubIdx];
+            
+            if (cameraMode === 'follow') {
+                const targetPin = HOLES_DATA[currentHoleIdx].pin;
+                const dir = new THREE.Vector3().subVectors(targetPin, ballPos).normalize();
+                
+                // Position behind ball aiming at hole
+                const camPos = ballPos.clone().sub(dir.clone().multiplyScalar(8)).add(new THREE.Vector3(0, 3.5, 0));
+                camera.position.copy(camPos);
+                controls.target.copy(ballPos);
+            } else if (cameraMode === 'pin') {
+                const targetPin = HOLES_DATA[currentHoleIdx].pin;
+                camera.position.copy(targetPin.clone().add(new THREE.Vector3(0, 8, 12)));
+                controls.target.copy(targetPin);
+            }
+            controls.update();
+        }
+
+        // --- Event Listeners & UI Controls ---
+        function initEventListeners() {
+            const btnSwing = document.getElementById('btn-swing');
+            btnSwing.addEventListener('mousedown', startPowerBuild);
+            btnSwing.addEventListener('mouseup', triggerSwing);
+            btnSwing.addEventListener('touchstart', (e) => { e.preventDefault(); startPowerBuild(); });
+            btnSwing.addEventListener('touchend', (e) => { e.preventDefault(); triggerSwing(); });
+
+            document.getElementById('btn-club-prev').addEventListener('click', () => changeClub(-1));
+            document.getElementById('btn-club-next').addEventListener('click', () => changeClub(1));
+
+            document.getElementById('btn-camera-mode').addEventListener('click', toggleCameraMode);
+            document.getElementById('btn-scorecard').addEventListener('click', () => toggleScorecard(true));
+            document.getElementById('btn-close-scorecard').addEventListener('click', () => toggleScorecard(false));
+
+            // Keybindings
+            window.addEventListener('keydown', (e) => {
+                if (e.code === 'Space') {
+                    if (!isPowerBuilding && !isBallMoving) startPowerBuild();
+                } else if (e.code === 'ArrowLeft') {
+                    aimOffset(-0.05);
+                } else if (e.code === 'ArrowRight') {
+                    aimOffset(0.05);
+                } else if (e.code === 'KeyC') {
+                    toggleCameraMode();
+                }
+            });
+            window.addEventListener('keyup', (e) => {
+                if (e.code === 'Space' && isPowerBuilding) {
+                    triggerSwing();
+                }
+            });
+        }
+
+        function changeClub(dir) {
+            selectedClubIdx = (selectedClubIdx + dir + GOLF_BAG.length) % GOLF_BAG.length;
+            updateHUD();
+        }
+
+        function toggleCameraMode() {
+            const modes = ['follow', 'pin'];
+            const idx = (modes.indexOf(cameraMode) + 1) % modes.length;
+            cameraMode = modes[idx];
+            document.getElementById('cam-mode-text').innerText = cameraMode === 'follow' ? 'Follow Cam' : 'Pin View';
+            resetCamera();
+        }
+
+        function aimOffset(angle) {
+            if (isBallMoving) return;
+            const targetPin = HOLES_DATA[currentHoleIdx].pin;
+            const dir = new THREE.Vector3().subVectors(targetPin, ballPos);
+            dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+            controls.target.copy(ballPos);
+            camera.position.sub(ballPos).applyAxisAngle(new THREE.Vector3(0, 1, 0), angle).add(ballPos);
+            controls.update();
+        }
+
+        function startPowerBuild() {
+            if (isBallMoving) return;
+            isPowerBuilding = true;
+            powerVal = 0;
+            powerDirection = 1;
+        }
+
+        function triggerSwing() {
+            if (!isPowerBuilding) return;
+            isPowerBuilding = false;
+
+            sound.playSwing();
+            setTimeout(() => sound.playImpact(powerVal / 100), 100);
+
+            executeSwing(powerVal / 100);
+            powerVal = 0;
+            updatePowerBarUI();
+        }
+
+        function executeSwing(powerRatio) {
+            if (powerRatio < 0.05) powerRatio = 0.05;
+            strokeCount++;
+            isBallMoving = true;
+
+            const club = GOLF_BAG[selectedClubIdx];
+            
+            // Aim vector calculation based on camera look direction relative to ball
+            const aimDir = new THREE.Vector3();
+            camera.getWorldDirection(aimDir);
+            aimDir.y = 0;
+            aimDir.normalize();
+
+            // Calculate swing velocity components
+            const totalSpeed = (club.maxDist * 0.45) * powerRatio;
+            const launchRad = club.angle * (Math.PI / 180);
+
+            ballVel.x = aimDir.x * totalSpeed * Math.cos(launchRad);
+            ballVel.z = aimDir.z * totalSpeed * Math.cos(launchRad);
+            ballVel.y = totalSpeed * Math.sin(launchRad);
+
+            // Record safe spot for water resets
+            lastTeeOrSafePos.copy(ballPos);
+            updateHUD();
+        }
+
+        // WebXR Swing Detection
+        function onVRSelectStart() {
+            if (!isBallMoving) {
+                executeSwing(0.8);
+            }
+        }
+        function onVRSelectEnd() {}
+
+        // --- Physics & Ball Simulation ---
+        function updatePhysics(dt) {
+            if (!isBallMoving) return;
+
+            const gravity = 9.81 * 2.2;
+            const club = GOLF_BAG[selectedClubIdx];
+
+            // Apply Wind
+            const windVec = new THREE.Vector3(
+                Math.cos(wind.angle) * wind.speed * 0.08,
+                0,
+                Math.sin(wind.angle) * wind.speed * 0.08
+            );
+
+            if (ballPos.y > 0.22) {
+                // Ball in Flight
+                ballVel.y -= gravity * dt;
+                ballVel.x += windVec.x * dt;
+                ballVel.z += windVec.z * dt;
+
+                ballVel.x *= club.drag;
+                ballVel.z *= club.drag;
+            } else {
+                // Ball on Ground / Rolling
+                ballPos.y = 0.2;
+                ballVel.y = 0;
+
+                const surface = detectSurface(ballPos);
+
+                // Surface Drag Adjustments
+                let friction = club.roll;
+                if (surface === 'rough') friction = 0.82;
+                if (surface === 'sand') friction = 0.65;
+                if (surface === 'green') friction = 0.96;
+
+                ballVel.x *= friction;
+                ballVel.z *= friction;
+
+                // Stop Threshold
+                if (ballVel.lengthSq() < 0.01) {
+                    ballVel.set(0, 0, 0);
+                    isBallMoving = false;
+                    checkHoleStatus();
+                }
+            }
+
+            // Move Ball
+            ballPos.addScaledVector(ballVel, dt);
+            ballMesh.position.copy(ballPos);
+
+            // Follow camera during motion
+            if (cameraMode === 'follow' && !renderer.xr.isPresenting) {
+                camera.position.addScaledVector(ballVel, dt * 0.8);
+                controls.target.copy(ballPos);
+                controls.update();
+            }
+
+            // Water Collision Check
+            const data = HOLES_DATA[currentHoleIdx];
+            data.water.forEach(w => {
+                if (ballPos.distanceTo(w.pos) < w.radius) {
+                    handleWaterHazard();
+                }
+            });
+        }
+
+        function detectSurface(pos) {
+            const data = HOLES_DATA[currentHoleIdx];
+
+            // Green Check
+            if (pos.distanceTo(data.pin) < data.greenRadius) return 'green';
+
+            // Sand Bunkers
+            for (let b of data.bunkers) {
+                if (pos.distanceTo(b.pos) < b.radius) {
+                    sound.playSand();
+                    return 'sand';
+                }
+            }
+
+            // Fairway Check
+            if (pos.distanceTo(data.fairwayCenter) < data.fairwayRadius) return 'fairway';
+
+            return 'rough';
+        }
+
+        function handleWaterHazard() {
+            sound.playWater();
+            isBallMoving = false;
+            ballVel.set(0, 0, 0);
+            
+            // Penalty stroke & reset
+            strokeCount++;
+            ballPos.copy(lastTeeOrSafePos);
+            ballMesh.position.copy(ballPos);
+            updateHUD();
+            resetCamera();
+        }
+
+        function checkHoleStatus() {
+            const data = HOLES_DATA[currentHoleIdx];
+            const distToPin = ballPos.distanceTo(data.pin);
+
+            // Hole In / Cup Detection (Within 1.2 yards)
+            if (distToPin < 1.2) {
+                sound.playCup();
+                ballPos.copy(data.pin);
+                ballPos.y = 0.1;
+                ballMesh.position.copy(ballPos);
+
+                holeScores[currentHoleIdx] = strokeCount;
+
+                setTimeout(() => {
+                    if (currentHoleIdx < HOLES_DATA.length - 1) {
+                        alert(`Hole ${currentHoleIdx + 1} Complete! Strokes: ${strokeCount}`);
+                        loadHole(currentHoleIdx + 1);
+                    } else {
+                        alert(`Round Complete! Total Score: ${getTotalScoreString()}`);
+                        toggleScorecard(true);
+                    }
+                }, 500);
+            }
+        }
+
+        // --- Render & Animation Loop ---
+        let clock = new THREE.Clock();
+
+        function animate() {
+            renderer.setAnimationLoop(render);
+        }
+
+        function render() {
+            const dt = Math.min(clock.getDelta(), 0.1);
+
+            // Power Bar animation loop
+            if (isPowerBuilding) {
+                powerVal += powerDirection * 120 * dt;
+                if (powerVal >= 100) { powerVal = 100; powerDirection = -1; }
+                if (powerVal <= 0) { powerVal = 0; powerDirection = 1; }
+                updatePowerBarUI();
+            }
+
+            updatePhysics(dt);
+            updateAimLine();
+            drawMinimap();
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function updateAimLine() {
+            if (isBallMoving) {
+                aimLine.visible = false;
+                return;
+            }
+            aimLine.visible = true;
+
+            const targetPin = HOLES_DATA[currentHoleIdx].pin;
+            const dir = new THREE.Vector3().subVectors(targetPin, ballPos).normalize();
+            const club = GOLF_BAG[selectedClubIdx];
+
+            const points = [];
+            const steps = 30;
+            const maxDist = club.maxDist * 0.35;
+
+            for (let i = 0; i <= steps; i++) {
+                const t = i / steps;
+                const p = ballPos.clone().addScaledVector(dir, maxDist * t);
+                // Parabolic arc for line indicator
+                p.y = ballPos.y + Math.sin(t * Math.PI) * (club.angle * 0.15);
+                points.push(p);
+            }
+
+            aimLine.geometry.setFromPoints(points);
+            aimLine.computeLineDistances();
+        }
+
+        // --- UI & HUD Updates ---
+        function updateHUD() {
+            const data = HOLES_DATA[currentHoleIdx];
+            const club = GOLF_BAG[selectedClubIdx];
+
+            document.getElementById('hud-hole-num').innerText = data.num;
+            document.getElementById('hud-hole-par').innerText = data.par;
+            document.getElementById('hud-strokes').innerText = strokeCount;
+
+            const distYds = Math.round(ballPos.distanceTo(data.pin) * 1.09361);
+            document.getElementById('hud-distance').innerText = `${distYds} yds`;
+
+            document.getElementById('hud-club-name').innerText = club.name;
+            document.getElementById('hud-club-range').innerText = `Max ~${club.maxDist} yds`;
+
+            document.getElementById('hud-wind-speed').innerText = `${wind.speed} mph`;
+            document.getElementById('hud-wind-arrow').style.transform = `rotate(${wind.angle}rad)`;
+        }
+
+        function updatePowerBarUI() {
+            const fill = document.getElementById('power-bar-fill');
+            fill.style.height = `${powerVal}%`;
+            document.getElementById('hud-power-val').innerText = `${Math.round(powerVal)}%`;
+        }
+
+        // Minimap Render
+        function drawMinimap() {
+            const canvas = document.getElementById('minimap-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const data = HOLES_DATA[currentHoleIdx];
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Transform World (X, Z) to Canvas 2D Space
+            const scale = 0.4;
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+
+            // Green
+            ctx.fillStyle = '#4ade80';
+            ctx.beginPath();
+            ctx.arc(cx + (data.pin.x - ballPos.x) * scale, cy + (data.pin.z - ballPos.z) * scale, data.greenRadius * scale, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Ball Position (Center)
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Pin Position
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.arc(cx + (data.pin.x - ballPos.x) * scale, cy + (data.pin.z - ballPos.z) * scale, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function toggleScorecard(show) {
+            const modal = document.getElementById('scorecard-modal');
+            if (show) {
+                renderScorecardRows();
+                modal.classList.remove('hidden');
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function renderScorecardRows() {
+            const container = document.getElementById('scorecard-rows');
+            container.innerHTML = '';
+
+            HOLES_DATA.forEach((h, i) => {
+                const strokes = holeScores[i] || '-';
+                const diff = holeScores[i] ? holeScores[i] - h.par : 0;
+                let resText = '-';
+                if (holeScores[i]) {
+                    if (diff === 0) resText = 'Par';
+                    else if (diff === -1) resText = 'Birdie';
+                    else if (diff === -2) resText = 'Eagle';
+                    else if (diff === 1) resText = 'Bogey';
+                    else resText = `+${diff}`;
+                }
+
+                const row = document.createElement('div');
+                row.className = 'grid grid-cols-4 text-sm font-semibold text-center p-2 rounded-xl bg-slate-800/40 border border-slate-700/40';
+                row.innerHTML = `
+                    <span class="text-emerald-400">#${h.num}</span>
+                    <span class="text-slate-400">${h.par}</span>
+                    <span class="text-amber-400">${strokes}</span>
+                    <span class="text-slate-300">${resText}</span>
+                `;
+                container.appendChild(row);
+            });
+
+            document.getElementById('scorecard-total').innerText = getTotalScoreString();
+        }
+
+        function getTotalScoreString() {
+            let totalPar = 0;
+            let totalStrokes = 0;
+            let played = 0;
+
+            HOLES_DATA.forEach((h, i) => {
+                if (holeScores[i] > 0) {
+                    totalPar += h.par;
+                    totalStrokes += holeScores[i];
+                    played++;
+                }
+            });
+
+            if (played === 0) return 'E (0)';
+            const diff = totalStrokes - totalPar;
+            return diff === 0 ? 'E' : (diff > 0 ? `+${diff}` : `${diff}`);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
